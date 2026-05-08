@@ -1,0 +1,20 @@
+{
+  "buttons": {
+    "clearReset": "Zeichenfläche löschen & Hintergrundfarbe zurücksetzen",
+    "exportJSON": "In Datei exportieren",
+    "save": "In aktueller Datei speichern",
+    "saveAs": "Speichern unter",
+    "zoomIn": "Vergrößern",
+    "zoomOut": "Verkleinern"
+  },
+  "labels": {
+    "copy": "Kopieren",
+    "cut": "Ausschneiden",
+    "delete": "Löschen",
+    "group": "Auswahl gruppieren",
+    "moveCanvas": "Leinwand verschieben",
+    "paste": "Einfügen",
+    "selectAll": "Alle auswählen",
+    "ungroup": "Gruppierung aufheben"
+  }
+}

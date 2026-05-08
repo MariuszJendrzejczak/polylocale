@@ -205,6 +205,51 @@ The whole structure is built into a single object then handed to
 `JSON.stringify(_, null, 2) + '\n'` — JS object insertion order carries
 determinism through the encoder, no manual stringification needed.
 
+### Path representation (flat ↔ nested JSON)
+
+`TranslationKey.path` is dot-segmented inside the model: `home.title`,
+not `home/title`, not a `string[]`. ARB and flat JSON keys map straight
+through (no separator interpretation); nested JSON's parser flattens the
+object tree on import and the exporter re-nests on export by splitting
+the path on `.`.
+
+The dot is therefore reserved as a **structural** character. Three
+consequences fall out:
+
+#### Nested JSON cannot carry a literal dot in a key
+
+`parseNestedJson` rejects any object key segment containing `.` —
+`{ "app.v1.title": "…" }` is ambiguous (one key with a literal dot, or
+three nesting levels?), and we'd rather refuse than guess. Flat JSON has
+no such restriction: `app.v1.title` is a single legal flat key whose
+model `path` happens to look 3-level. The model itself doesn't care;
+only nested JSON does.
+
+#### Flat ↔ nested are interchangeable views — with one exception
+
+The same `LocalizationProject` exports cleanly to either form **provided
+no path is a strict prefix of another**. If the model holds both `home`
+(leaf) and `home.title` (leaf), nested JSON cannot represent both: the
+object position `home` would have to be both a string and a parent.
+`exportNestedJson` throws naming both paths rather than dropping either
+— consistent with the no-silent-data-loss rule. Flat JSON has no such
+restriction.
+
+In practice, prefix-collisions only arise when projects mix formats
+carelessly: a flat JSON file with a key `home` plus a nested JSON file
+with a `home.title` leaf, composed into the same project. The exporter
+catches it; the model itself is happy to hold the data.
+
+#### Flat-imported `app.v1.title` round-trips through nested as a tree
+
+A flat JSON file with key `app.v1.title` parses to `path: 'app.v1.title'`.
+Re-exporting that project as **nested** JSON produces
+`{ "app": { "v1": { "title": "…" } } }`. Re-importing that nested file
+yields the same model `path`. The surface representation flipped; the
+model is byte-identical. This is the contract of choosing a format —
+nested JSON's path-shape is **structural**, flat JSON's is **opaque**,
+and the model is always the latter.
+
 ### Why `formatMetadata` on `SourceFile`
 
 We will encounter format quirks we don't model — ARB has `@@last_modified`,
@@ -434,7 +479,9 @@ it belongs in `core` or `ai`. If no, it belongs in `ui` or `apps/app`.
   property-based generator. Locale detection helpers (basic BCP-47).
 - **Session 3:** ARB parser + exporter. Introduces ICU IR end-to-end and
   `@key` metadata handling.
-- **Session 4:** nested JSON parser + exporter. Path-segmented keys.
+- **Session 4 (done):** nested JSON parser + exporter. Path-segmented
+  keys, prefix-collision handling, cross-format equivalence with flat
+  JSON.
 - **Parallel:** UI tabular editor once the model is stable (TanStack Table
   is a strong candidate; decided in the UI session).
 - **Parallel:** AI providers once one format works end-to-end. First

@@ -1,0 +1,21 @@
+{
+  "actions": {
+    "cancel": "Anuluj",
+    "ok": "OK",
+    "save": "Zapisz"
+  },
+  "app": {
+    "title": "Polylocale"
+  },
+  "home": {
+    "greeting": "Cześć",
+    "welcome": "Witaj w Polylocale"
+  },
+  "settings": {
+    "section": {
+      "appearance": "Wygląd",
+      "language": "Język"
+    },
+    "title": "Ustawienia"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "cart": {
+    "items": "{count, plural, offset:1 =0 {Brak elementów} =1 {Jeden element} one {# element} few {# elementy} many {# elementów} other {# elementu}}",
+    "total": "Suma: {amount, number, ::currency/PLN}"
+  },
+  "home": {
+    "greeting": "Witaj {name}",
+    "marketing": {
+      "checkout": "Przeczytaj <b>dokumentację</b>",
+      "tagline": "Witaj ponownie, {name}!"
+    }
+  },
+  "profile": {
+    "pronoun": "{gender, select, male {On} female {Ona} other {Oni}}"
+  }
+}
