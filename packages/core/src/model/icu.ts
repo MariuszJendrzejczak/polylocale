@@ -38,6 +38,7 @@ export interface ICUSelectOrdinal {
   readonly kind: 'selectordinal';
   readonly arg: string;
   readonly cases: Readonly<Record<string, readonly ICUNode[]>>;
+  readonly offset?: number;
 }
 
 export interface ICUTag {

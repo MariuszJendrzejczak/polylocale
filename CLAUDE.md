@@ -31,7 +31,7 @@ Repo is a **pnpm monorepo**: `packages/core`, `packages/ai`, `packages/ui`,
 | Tests             | Vitest + fixtures + snapshots + property-based (fast-check) for parsers                  |
 | Lint / format     | ESLint (flat config) + Prettier                                                          |
 | Package manager   | pnpm workspaces (pnpm 11+)                                                               |
-| Node              | 20+                                                                                      |
+| Node              | 22+ (pnpm 11 uses `node:sqlite`)                                                         |
 
 Full rationale lives in `ARCHITECTURE.md`.
 
@@ -128,7 +128,10 @@ When adding a new format (Phase 2: i18next, FormatJS; Phase 3: native):
 3. **Round-trip test** in `packages/core/src/exporters/<format>.test.ts`:
    parse → export → parse → assert deep-equal. Snapshot the exported text.
 4. **Property-based test** with `fast-check` — generate random valid inputs
-   for that format, parse + export + parse, assert equivalence.
+   for that format, parse + export + parse, assert equivalence. The
+   generators live in their own module (template:
+   `packages/core/src/icu/arbitrary.ts`); never inline them in a single
+   test file.
 5. **Real-world fixtures** in `packages/core/fixtures/<format>/`:
    one tiny example, one realistic example, plus minimal repros for every
    bug you fix. File pairs as `<case>.in.<ext>` / `<case>.out.<ext>`.

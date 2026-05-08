@@ -93,10 +93,48 @@ get three things for free:
 3. **Cheap diffing** — semantic diff between IR trees beats string diff for
    detecting "did the translation actually change anything meaningful".
 
-Implementation will lean on
+Implementation leans on
 [`@formatjs/icu-messageformat-parser`](https://www.npmjs.com/package/@formatjs/icu-messageformat-parser)
 for the heavy lifting. The IR in `packages/core/src/model/icu.ts` is a thin,
-internal-only shape so we are not coupled to formatjs's exact AST.
+internal-only shape so we are not coupled to formatjs's exact AST. The single
+file allowed to import from `@formatjs/icu-messageformat-parser` is
+`packages/core/src/icu/parse.ts`; the renderer (`render.ts`) is a pure walker
+over our IR with no parser coupling.
+
+#### Whitespace and idempotency
+
+`renderICU(parseICU(s)) === s` is **not** guaranteed at the byte level.
+`@formatjs` normalizes whitespace inside plural/select case lists, drops
+location info, and our renderer applies its own canonical case ordering
+(`=N` numeric ascending, then CLDR keyword order with `other` last).
+Different surface, same meaning.
+
+What we do hold is **double-round-trip stability** of the IR:
+
+```
+parseICU(renderICU(parseICU(s))) ≡ parseICU(s)
+```
+
+— round-tripping the IR through the renderer and back produces an
+identical tree. This is exercised by
+`packages/core/src/icu/round-trip.test.ts` and is the property AI
+translation will rely on when comparing pre/post-translation messages.
+
+Byte-exact round-trip for unmodified imports is provided separately by
+the flat-JSON exporter's `raw` shortcut: parsers stash the original
+string on every `TranslationValue`; the exporter emits that string
+verbatim whenever `parseICU(raw) ≡ value.ir`. The shortcut misses (and
+`renderICU` takes over) once UI or AI translation has actually edited
+the IR. That trade keeps "no surprise rewrites" of files the user hasn't
+touched, while still giving us a real renderer for everything else.
+
+A subtle case: ICU's `#` placeholder inside a plural body (`PoundElement`)
+is mapped to `Text('#')` in our IR — we don't carry a separate `pound`
+variant. The text node renders as a bare `#` (no escaping) inside a
+plural case, which `@formatjs` re-parses to `PoundElement` and we re-map
+back to `Text('#')`. The two-step is a fixed point, so the IR stays
+stable even though the surface representation flips between Pound and
+literal-text on each side of the boundary.
 
 ### Why `formatMetadata` on `SourceFile`
 
@@ -221,6 +259,29 @@ Each decision below uses Decision / Context / Alternatives / Consequences.
   Door open for dual-licensing or open-core later.
 - **Consequences:** Some companies avoid AGPL in their products —
   acceptable; this is a developer tool, not a library you embed.
+
+### 3.9 Locale code normalization (BCP-47, hyphen-separated)
+
+- **Decision:** All `LocaleCode` values inside the model are BCP-47 with a
+  hyphen separator: language subtag lowercase, optional script subtag in
+  title case (`Hant`), region subtag uppercase (`PL`) or kept verbatim if
+  numeric (UN M.49: `419`). Parsers normalize at the file/folder boundary
+  via `normalizeLocale` / `detectLocaleFromFileName` from
+  `@polylocale/core`.
+- **Context:** Real-world filenames mix conventions — `pl_PL.json` (Java
+  / Flutter), `pl-PL.json` (web / BCP-47), `zh-Hant.json`,
+  `EN-us.json`. The model needs one canonical form so equality, merge,
+  diff, and UI all see the same string. BCP-47 is the lingua franca:
+  HTML `lang`, browser APIs, ICU, and Flutter's locale resolution all
+  understand it.
+- **Alternatives considered:** Keep input verbatim and compare
+  case-insensitively — rejected; turns equality into a function call
+  everywhere and complicates `Record<LocaleCode, ...>` lookups.
+- **Consequences:** Locale-bearing inputs go through `normalizeLocale`
+  exactly once, at the parser. Exporters use the canonical form. When a
+  Flutter project prefers underscore filenames (`pl_PL.arb`), that's a
+  per-format _output_ concern handled in the exporter, not a model
+  change.
 
 ---
 

@@ -60,8 +60,13 @@ export interface TranslationKey {
 }
 
 export interface TranslationValue {
-  /** Source of truth — used by exporters and AI translation. */
-  readonly ir: ICUNode;
+  /**
+   * Structural ICU IR — source of truth for exporters and AI translation.
+   * A message parses to a sequence of top-level elements (e.g. `"Hello {n}"`
+   * → `[Text, Placeholder]`), so the field is an array even when there's
+   * just one node.
+   */
+  readonly ir: readonly ICUNode[];
   /** Original raw string from import; kept verbatim for round-trip optimization. */
   readonly raw?: string;
   readonly reviewed: boolean;
