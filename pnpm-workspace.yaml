@@ -1,0 +1,8 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# Allow esbuild's install script to run (used by Vite). Listed explicitly per
+# pnpm 11's safer default; without this the dev server build would no-op.
+allowBuilds:
+  esbuild: true

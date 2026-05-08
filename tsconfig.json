@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/ai" },
+    { "path": "./packages/ui" },
+    { "path": "./apps/app/tsconfig.app.json" },
+    { "path": "./apps/app/tsconfig.node.json" }
+  ]
+}
