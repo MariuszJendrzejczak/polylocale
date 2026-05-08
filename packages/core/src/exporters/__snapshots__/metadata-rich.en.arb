@@ -1,0 +1,47 @@
+{
+  "@@locale": "en",
+  "@@last_modified": "2026-05-08T14:30:00.000+02:00",
+  "@@x-author": "polylocale-team",
+  "@@x-vendor-extension": {
+    "trackingId": "POL-42",
+    "category": "marketing"
+  },
+  "complex": "Hello {firstName}",
+  "@complex": {
+    "description": "Greeting that includes the user's first name",
+    "placeholders": {
+      "firstName": {
+        "type": "String",
+        "example": "Mariusz",
+        "description": "End-user's display name as captured during signup"
+      }
+    },
+    "context": "HomeScreen"
+  },
+  "escapes": "Use ''quotes'' and a literal '{' brace",
+  "@escapes": {
+    "description": "Demonstrates ICU escape sequences"
+  },
+  "nested": "{gender, select, male {{count, plural, =0 {He has none} one {He has one} other {He has #}}} female {{count, plural, =0 {She has none} one {She has one} other {She has #}}} other {{count, plural, =0 {They have none} one {They have one} other {They have #}}}}",
+  "@nested": {
+    "description": "Plural inside select",
+    "placeholders": {
+      "gender": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "userCount": "{n} users",
+  "@userCount": {
+    "placeholders": {
+      "n": {
+        "type": "int",
+        "example": "42"
+      }
+    }
+  },
+  "welcome": "Welcome aboard"
+}

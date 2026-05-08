@@ -25,12 +25,7 @@ import { parseICU } from '../icu/parse.js';
 import { detectLocaleFromFileName } from '../locale/detect.js';
 import { normalizeLocale } from '../locale/normalize.js';
 import type { ParsedFile } from '../model/compose.js';
-import type {
-  LocaleCode,
-  Placeholder,
-  TranslationKey,
-  TranslationValue,
-} from '../model/types.js';
+import type { LocaleCode, Placeholder, TranslationKey, TranslationValue } from '../model/types.js';
 
 export interface ParseArbInput {
   readonly fileName: string;
@@ -122,10 +117,7 @@ function splitEntries(top: Record<string, unknown>): SplitEntries {
   return { fileMeta, fileMetaOrder, keyMeta, translationEntries };
 }
 
-function resolveLocale(
-  fileMeta: Record<string, unknown>,
-  fileName: string,
-): LocaleCode {
+function resolveLocale(fileMeta: Record<string, unknown>, fileName: string): LocaleCode {
   const fromAtAt = fileMeta['@@locale'];
   if (typeof fromAtAt === 'string') {
     const normalized = normalizeLocale(fromAtAt);
@@ -239,12 +231,7 @@ function parsePlaceholders(
   return entries.map(([name, def]) => buildPlaceholder(name, def, path, fileName));
 }
 
-function buildPlaceholder(
-  name: string,
-  def: unknown,
-  path: string,
-  fileName: string,
-): Placeholder {
+function buildPlaceholder(name: string, def: unknown, path: string, fileName: string): Placeholder {
   if (def === null || typeof def !== 'object' || Array.isArray(def)) {
     throw new Error(
       `parseArb: placeholder "${name}" in "@${path}" of "${fileName}" must be a JSON object (got ${describeType(def)})`,

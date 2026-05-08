@@ -1,0 +1,49 @@
+{
+  "@@locale": "pl",
+  "cardsDemoExploreSemantics": "{destinationName} – zobacz to miejsce",
+  "@cardsDemoExploreSemantics": {
+    "description": "Semantics label for Explore. Label tells user to explore the destinationName to the user. Example Explore Tamil",
+    "placeholders": {
+      "destinationName": {
+        "example": "Tamil"
+      }
+    }
+  },
+  "cardsDemoShareSemantics": "{destinationName} – udostępnij informacje o tym miejscu",
+  "@cardsDemoShareSemantics": {
+    "description": "Semantics label for Share. Label tells user to share the destinationName to the user. Example Share Tamil",
+    "placeholders": {
+      "destinationName": {
+        "example": "Tamil"
+      }
+    }
+  },
+  "deselect": "Odznacz",
+  "@deselect": {
+    "description": "Deselect a (selectable) item"
+  },
+  "dismiss": "ZAMKNIJ",
+  "@dismiss": {
+    "description": "When text is pressed the banner widget will be removed from the screen."
+  },
+  "notSelected": "Nie zaznaczono",
+  "@notSelected": {
+    "description": "Indicates the status of a (selectable) item not being selected"
+  },
+  "select": "Zaznacz",
+  "@select": {
+    "description": "Select a (selectable) item"
+  },
+  "selectable": "Możliwość zaznaczenia (przez przytrzymanie)",
+  "@selectable": {
+    "description": "Indicates the associated piece of UI is selectable by long pressing it"
+  },
+  "selected": "Zaznaczono",
+  "@selected": {
+    "description": "Indicates status of a (selectable) item being selected"
+  },
+  "signIn": "ZALOGUJ SIĘ",
+  "@signIn": {
+    "description": "Sign in label to sign into website."
+  }
+}

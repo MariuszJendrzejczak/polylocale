@@ -6,3 +6,4 @@ export type { ParseFlatJsonInput } from './parsers/json-flat.js';
 export { exportFlatJson } from './exporters/json-flat.js';
 export { parseArb } from './parsers/arb.js';
 export type { ParseArbInput } from './parsers/arb.js';
+export { exportArb } from './exporters/arb.js';

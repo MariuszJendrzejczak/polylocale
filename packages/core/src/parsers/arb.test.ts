@@ -41,9 +41,7 @@ describe('parseArb', () => {
 
     const greeting = result.keys.find((k) => k.path === 'greeting')!;
     expect(greeting.description).toBe('Friendly greeting on the home screen');
-    expect(greeting.placeholders).toEqual([
-      { name: 'name', type: 'String', example: 'Jane' },
-    ]);
+    expect(greeting.placeholders).toEqual([{ name: 'name', type: 'String', example: 'Jane' }]);
     expect(greeting.values.en?.ir).toEqual([
       { kind: 'text', value: 'Hello ' },
       { kind: 'placeholder', name: 'name' },
@@ -82,9 +80,7 @@ describe('parseArb', () => {
 
     const userCount = result.keys.find((k) => k.path === 'userCount')!;
     expect(userCount.description).toBeUndefined();
-    expect(userCount.placeholders).toEqual([
-      { name: 'n', type: 'int', example: '42' },
-    ]);
+    expect(userCount.placeholders).toEqual([{ name: 'n', type: 'int', example: '42' }]);
     expect(userCount.keyMetadata).toBeUndefined();
 
     const welcome = result.keys.find((k) => k.path === 'welcome')!;
@@ -157,9 +153,9 @@ describe('parseArb', () => {
     });
 
     it('throws when neither @@locale nor filename yields a locale', () => {
-      expect(() =>
-        parseArb({ fileName: 'translations.arb', text: '{"foo":"x"}' }),
-      ).toThrowError(/could not resolve locale/);
+      expect(() => parseArb({ fileName: 'translations.arb', text: '{"foo":"x"}' })).toThrowError(
+        /could not resolve locale/,
+      );
     });
   });
 

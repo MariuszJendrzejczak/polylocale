@@ -36,6 +36,6 @@ against keys that real Flutter apps actually ship.
 - `placeholders` entries use only `example` (no `type`) — verifies the
   parser handles a partial `Placeholder` shape.
 - Description strings include single quotes (`"Sign in label to sign into
-  website."`) which JSON itself doesn't care about but ICU's literal
+website."`) which JSON itself doesn't care about but ICU's literal
   apostrophe rule does — exercises the `raw`-shortcut path that bypasses
   `renderICU` for unmodified imports.
