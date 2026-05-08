@@ -136,6 +136,75 @@ back to `Text('#')`. The two-step is a fixed point, so the IR stays
 stable even though the surface representation flips between Pound and
 literal-text on each side of the boundary.
 
+### ARB-specific decisions
+
+ARB (Application Resource Bundle, Flutter's native format) is the first
+format that exercises every escape hatch in the model. Three decisions
+worth pinning down before contributors stare at `parsers/arb.ts` and
+`exporters/arb.ts`:
+
+#### `@key` metadata splits across the model
+
+Each `@foo` block on import gets dismantled three ways:
+
+- `description` (string) → `TranslationKey.description`
+- `placeholders` (object, name → `{ type?, example?, description? }`) →
+  `TranslationKey.placeholders[]`
+- everything else (`context`, `type`, vendor extensions, …) →
+  `TranslationKey.keyMetadata` (verbatim, untyped)
+
+The first two are the fields UI and AI providers actually consume. The
+third exists so unknown fields survive round-trip without ballooning the
+typed model. An empty `placeholders: {}` object on input parses to
+`undefined` (and is omitted on export) — equal-meaning encodings collapse
+to one canonical absence.
+
+#### Per-key metadata is model-wide, not per-locale
+
+When `app_en.arb` carries `@foo.description` and `app_pl.arb` carries no
+`@foo` block at all (the typical "target locale file" pattern), the model
+ends up with one shared `TranslationKey.description`. On export, **every**
+locale file gains the description block. The `pl` round-trip is therefore
+not byte-identical to the input — it grew metadata it didn't originally
+have.
+
+This trade-off is deliberate: it matches how Flutter's `gen-l10n` actually
+produces target files (uniform `@key` shape across locales), keeps the
+model honest (one description per key, not N), and respects the "no silent
+data loss" rule (we **add** structure, never drop it). Per-file metadata
+fidelity (different `@foo` blocks per locale) is a future concern; if
+needed, it lands as a `keyBlocks` map under `SourceFile.formatMetadata`
+without disturbing this layer.
+
+#### `@@` keys survive in `formatMetadata` with insertion order
+
+File-level keys (`@@locale`, `@@last_modified`, `@@x-author`, vendor
+extensions) land in `SourceFile.formatMetadata.fileMeta` as a verbatim
+map; their original position lands in `formatMetadata.fileMetaOrder` as a
+parallel string array. The exporter replays that order on output. When
+`@@locale` is absent on input, the exporter synthesizes it as the first
+key from the locale argument — ARB tooling expects it, and the cost
+(round-trip not byte-identical for files that omitted it) is bounded.
+
+#### Export key order, in full
+
+1. `@@`-keys, in `fileMetaOrder`, with `@@locale` synthesized at the
+   front when missing. Anything in `fileMeta` that wasn't in
+   `fileMetaOrder` (defensive only — the parser shouldn't produce this)
+   trails alphabetically.
+2. Translation keys, sorted alphabetically by `path`. Keys without a
+   value for the requested locale are skipped (a missing translation is
+   a missing line, not an empty string).
+3. Each translation key `foo` is immediately followed by `@foo` whenever
+   the model carries any of `description`, `placeholders`, or
+   `keyMetadata`. The `@foo` block fields are written in canonical order:
+   `description` first, `placeholders` second (omitted when empty), then
+   `keyMetadata` fields in their captured insertion order.
+
+The whole structure is built into a single object then handed to
+`JSON.stringify(_, null, 2) + '\n'` — JS object insertion order carries
+determinism through the encoder, no manual stringification needed.
+
 ### Why `formatMetadata` on `SourceFile`
 
 We will encounter format quirks we don't model — ARB has `@@last_modified`,
