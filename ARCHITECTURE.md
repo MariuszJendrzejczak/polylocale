@@ -222,6 +222,29 @@ Each decision below uses Decision / Context / Alternatives / Consequences.
 - **Consequences:** Some companies avoid AGPL in their products —
   acceptable; this is a developer tool, not a library you embed.
 
+### 3.9 Locale code normalization (BCP-47, hyphen-separated)
+
+- **Decision:** All `LocaleCode` values inside the model are BCP-47 with a
+  hyphen separator: language subtag lowercase, optional script subtag in
+  title case (`Hant`), region subtag uppercase (`PL`) or kept verbatim if
+  numeric (UN M.49: `419`). Parsers normalize at the file/folder boundary
+  via `normalizeLocale` / `detectLocaleFromFileName` from
+  `@polylocale/core`.
+- **Context:** Real-world filenames mix conventions — `pl_PL.json` (Java
+  / Flutter), `pl-PL.json` (web / BCP-47), `zh-Hant.json`,
+  `EN-us.json`. The model needs one canonical form so equality, merge,
+  diff, and UI all see the same string. BCP-47 is the lingua franca:
+  HTML `lang`, browser APIs, ICU, and Flutter's locale resolution all
+  understand it.
+- **Alternatives considered:** Keep input verbatim and compare
+  case-insensitively — rejected; turns equality into a function call
+  everywhere and complicates `Record<LocaleCode, ...>` lookups.
+- **Consequences:** Locale-bearing inputs go through `normalizeLocale`
+  exactly once, at the parser. Exporters use the canonical form. When a
+  Flutter project prefers underscore filenames (`pl_PL.arb`), that's a
+  per-format _output_ concern handled in the exporter, not a model
+  change.
+
 ---
 
 ## 4. AI translation flow (preview)
