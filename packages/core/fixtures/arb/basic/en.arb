@@ -1,0 +1,28 @@
+{
+  "@@locale": "en",
+  "appTitle": "Polylocale",
+  "@appTitle": {
+    "description": "Application title shown in the title bar"
+  },
+  "greeting": "Hello {name}",
+  "@greeting": {
+    "description": "Friendly greeting on the home screen",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Jane"
+      }
+    }
+  },
+  "items": "{count, plural, offset:1 =0 {No items} =1 {One item} one {# item} other {# items}}",
+  "@items": {
+    "description": "Pluralized item count",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "save": "Save"
+}

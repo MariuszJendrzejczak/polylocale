@@ -4,9 +4,9 @@ Open-source, web-based localization manager. Phase 1 is **Flutter-first** —
 import, edit, AI-translate, and export `.arb` and JSON locale files, in your
 browser, with your own AI keys, with your files staying on your machine.
 
-> **Status:** pre-alpha. Session 1 produced the foundation only — repo
-> scaffold, internal data model, docs, license, CI. **No working features
-> yet.** First parser (flat JSON) lands in Session 2.
+> **Status:** pre-alpha. The core layer ships flat-JSON and ARB
+> parsers + exporters with structural ICU IR and round-trip property
+> tests. UI, AI providers, and persistence are still ahead.
 
 ## Why
 

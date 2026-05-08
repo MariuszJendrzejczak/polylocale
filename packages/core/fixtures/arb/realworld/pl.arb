@@ -1,0 +1,11 @@
+{
+  "deselect": "Odznacz",
+  "select": "Zaznacz",
+  "selectable": "Możliwość zaznaczenia (przez przytrzymanie)",
+  "selected": "Zaznaczono",
+  "notSelected": "Nie zaznaczono",
+  "signIn": "ZALOGUJ SIĘ",
+  "dismiss": "ZAMKNIJ",
+  "cardsDemoExploreSemantics": "{destinationName} – zobacz to miejsce",
+  "cardsDemoShareSemantics": "{destinationName} – udostępnij informacje o tym miejscu"
+}

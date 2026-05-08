@@ -51,6 +51,7 @@ export function composeProject(input: ComposeProjectInput): LocalizationProject 
           values: incomingValue ? { [source.locale]: incomingValue } : {},
           description: key.description,
           placeholders: key.placeholders,
+          keyMetadata: key.keyMetadata,
         });
       } else {
         if (incomingValue !== undefined) existing.values[source.locale] = incomingValue;
@@ -59,6 +60,9 @@ export function composeProject(input: ComposeProjectInput): LocalizationProject 
         }
         if (existing.placeholders === undefined && key.placeholders !== undefined) {
           existing.placeholders = key.placeholders;
+        }
+        if (existing.keyMetadata === undefined && key.keyMetadata !== undefined) {
+          existing.keyMetadata = key.keyMetadata;
         }
       }
     }
@@ -92,6 +96,7 @@ interface MergedKey {
   values: Record<LocaleCode, TranslationValue>;
   description: string | undefined;
   placeholders: readonly Placeholder[] | undefined;
+  keyMetadata: Readonly<Record<string, unknown>> | undefined;
 }
 
 function buildKey(merged: MergedKey, locales: readonly LocaleCode[]): TranslationKey {
@@ -103,6 +108,7 @@ function buildKey(merged: MergedKey, locales: readonly LocaleCode[]): Translatio
     status,
     ...(merged.description !== undefined ? { description: merged.description } : {}),
     ...(merged.placeholders !== undefined ? { placeholders: merged.placeholders } : {}),
+    ...(merged.keyMetadata !== undefined ? { keyMetadata: merged.keyMetadata } : {}),
   };
 }
 

@@ -56,6 +56,13 @@ export interface TranslationKey {
   /** ARB `@key.description` or equivalent, when available. */
   readonly description?: string;
   readonly placeholders?: readonly Placeholder[];
+  /**
+   * Format-specific extras (e.g. ARB `@key.context`, `@key.type`).
+   * Parsers stash whatever they read here without interpreting it; the
+   * exporter emits it back verbatim. Parallel to {@link SourceFile.formatMetadata}
+   * but scoped to a single key.
+   */
+  readonly keyMetadata?: Readonly<Record<string, unknown>>;
   readonly status: KeyStatus;
 }
 
