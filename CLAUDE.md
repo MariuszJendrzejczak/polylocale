@@ -31,7 +31,7 @@ Repo is a **pnpm monorepo**: `packages/core`, `packages/ai`, `packages/ui`,
 | Tests             | Vitest + fixtures + snapshots + property-based (fast-check) for parsers                  |
 | Lint / format     | ESLint (flat config) + Prettier                                                          |
 | Package manager   | pnpm workspaces (pnpm 11+)                                                               |
-| Node              | 20+                                                                                      |
+| Node              | 22+ (pnpm 11 uses `node:sqlite`)                                                         |
 
 Full rationale lives in `ARCHITECTURE.md`.
 
