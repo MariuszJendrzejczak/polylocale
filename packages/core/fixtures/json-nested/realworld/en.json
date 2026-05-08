@@ -1,0 +1,20 @@
+{
+  "buttons": {
+    "clearReset": "Reset the canvas",
+    "exportJSON": "Export to file",
+    "save": "Save to current file",
+    "saveAs": "Save as",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out"
+  },
+  "labels": {
+    "copy": "Copy",
+    "cut": "Cut",
+    "delete": "Delete",
+    "group": "Group selection",
+    "moveCanvas": "Move canvas",
+    "paste": "Paste",
+    "selectAll": "Select all",
+    "ungroup": "Ungroup selection"
+  }
+}
