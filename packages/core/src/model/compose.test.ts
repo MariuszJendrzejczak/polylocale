@@ -5,7 +5,7 @@ import type { TranslationKey, TranslationValue } from './types.js';
 
 function value(text: string): TranslationValue {
   return {
-    ir: { kind: 'text', value: text },
+    ir: [{ kind: 'text', value: text }],
     raw: text,
     reviewed: false,
     modifiedAt: 0,

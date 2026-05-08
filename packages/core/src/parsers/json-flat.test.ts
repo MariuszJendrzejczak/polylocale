@@ -30,7 +30,10 @@ describe('parseFlatJson', () => {
     const greeting = result.keys.find((k) => k.path === 'greeting')!;
     expect(greeting.id).toBe('greeting');
     expect(greeting.values.en).toEqual({
-      ir: { kind: 'text', value: 'Hello {name}' },
+      ir: [
+        { kind: 'text', value: 'Hello ' },
+        { kind: 'placeholder', name: 'name' },
+      ],
       raw: 'Hello {name}',
       reviewed: false,
       modifiedAt: 0,
@@ -74,5 +77,50 @@ describe('parseFlatJson', () => {
     expect(() => parseFlatJson({ fileName: 'en.json', text: '{"count": 3}' })).toThrowError(
       /value for key "count".*must be a string \(got number\)/,
     );
+  });
+
+  it('throws on malformed ICU value with the offending key in the message', () => {
+    expect(() =>
+      parseFlatJson({ fileName: 'en.json', text: '{"broken": "{n, plural, one {x}"}' }),
+    ).toThrowError(/value for key "broken".*not valid ICU MessageFormat/);
+  });
+
+  it('parses ICU plural / select / tag fixture into structural IR', () => {
+    const fixtureRoot = resolve(here, '../../fixtures/json-flat/icu');
+    const text = readFileSync(resolve(fixtureRoot, 'en.json'), 'utf8');
+    const result = parseFlatJson({ fileName: 'icu/en.json', text });
+
+    const items = result.keys.find((k) => k.path === 'items')!;
+    expect(items.values.en?.ir).toEqual([
+      {
+        kind: 'plural',
+        arg: 'count',
+        offset: 1,
+        cases: {
+          '=0': [{ kind: 'text', value: 'No items' }],
+          '=1': [{ kind: 'text', value: 'One item' }],
+          one: [
+            { kind: 'text', value: '#' },
+            { kind: 'text', value: ' item' },
+          ],
+          other: [
+            { kind: 'text', value: '#' },
+            { kind: 'text', value: ' items' },
+          ],
+        },
+      },
+    ]);
+
+    const total = result.keys.find((k) => k.path === 'total')!;
+    expect(total.values.en?.ir).toEqual([
+      { kind: 'text', value: 'Total: ' },
+      { kind: 'placeholder', name: 'amount', type: 'number', format: '::currency/USD' },
+    ]);
+
+    const checkout = result.keys.find((k) => k.path === 'checkout')!;
+    expect(checkout.values.en?.ir).toEqual([
+      { kind: 'text', value: 'Read ' },
+      { kind: 'tag', name: 'b', children: [{ kind: 'text', value: 'the docs' }] },
+    ]);
   });
 });

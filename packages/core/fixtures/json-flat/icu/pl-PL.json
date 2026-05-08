@@ -1,0 +1,9 @@
+{
+  "checkout": "Przeczytaj <b>dokumentację</b>",
+  "datedAt": "Stan na {today, date, short}",
+  "items": "{count, plural, offset:1 =0 {Brak przedmiotów} =1 {Jeden przedmiot} one {# przedmiot} few {# przedmioty} many {# przedmiotów} other {# przedmiotów}}",
+  "place": "{place, selectordinal, =1 {1.} =2 {2.} =3 {3.} other {#.}}",
+  "pronoun": "{gender, select, male {On} female {Ona} other {Oni}}",
+  "total": "Suma: {amount, number, ::currency/USD}",
+  "welcomeBack": "{count, plural, =0 {Brak nowych wiadomości} other {Witaj ponownie, {name}!}}"
+}

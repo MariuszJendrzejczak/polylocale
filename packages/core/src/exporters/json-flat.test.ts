@@ -2,15 +2,21 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { LocalizationProject } from '../model/types.js';
 import { composeProject } from '../model/compose.js';
 import { parseFlatJson } from '../parsers/json-flat.js';
 import { exportFlatJson } from './json-flat.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtureDir = resolve(here, '../../fixtures/json-flat/basic');
+const icuFixtureDir = resolve(here, '../../fixtures/json-flat/icu');
 
 function readFixture(name: string): string {
   return readFileSync(resolve(fixtureDir, name), 'utf8');
+}
+
+function readIcuFixture(name: string): string {
+  return readFileSync(resolve(icuFixtureDir, name), 'utf8');
 }
 
 function buildProject() {
@@ -92,5 +98,55 @@ describe('exportFlatJson', () => {
   it('always emits a trailing newline', () => {
     const project = buildProject();
     expect(exportFlatJson(project, 'en').endsWith('\n')).toBe(true);
+  });
+
+  describe('with ICU fixture (raw shortcut path)', () => {
+    function buildIcuProject(): LocalizationProject {
+      const en = parseFlatJson({ fileName: 'en.json', text: readIcuFixture('en.json') });
+      const pl = parseFlatJson({ fileName: 'pl-PL.json', text: readIcuFixture('pl-PL.json') });
+      return composeProject({
+        id: 'icu',
+        name: 'icu',
+        baseLocale: 'en',
+        sources: [en, pl],
+      });
+    }
+
+    it('round-trips icu/en.json byte-for-byte', () => {
+      const project = buildIcuProject();
+      expect(exportFlatJson(project, 'en')).toBe(readIcuFixture('en.json'));
+    });
+
+    it('round-trips icu/pl-PL.json byte-for-byte', () => {
+      const project = buildIcuProject();
+      expect(exportFlatJson(project, 'pl-PL')).toBe(readIcuFixture('pl-PL.json'));
+    });
+  });
+
+  it('falls back to renderICU when the IR has been edited away from raw', () => {
+    const project = buildProject();
+
+    // Mutate the IR for the `greeting` key — placeholder name `name` → `who`.
+    // Now `parseICU(raw)` no longer matches `value.ir`, so the raw shortcut
+    // misses and the exporter must rebuild the string from the IR.
+    const greeting = project.keys.find((k) => k.path === 'greeting')!;
+    const original = greeting.values.en!;
+    const dirty: typeof original = {
+      ...original,
+      ir: [
+        { kind: 'text', value: 'Hello ' },
+        { kind: 'placeholder', name: 'who' },
+      ],
+    };
+    const dirtyProject: LocalizationProject = {
+      ...project,
+      keys: project.keys.map((k) =>
+        k.path === 'greeting' ? { ...k, values: { ...k.values, en: dirty } } : k,
+      ),
+    };
+
+    const out = exportFlatJson(dirtyProject, 'en');
+    expect(out).toContain('"greeting": "Hello {who}"');
+    expect(out).not.toContain('"greeting": "Hello {name}"');
   });
 });

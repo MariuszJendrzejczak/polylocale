@@ -1,0 +1,9 @@
+{
+  "checkout": "Read <b>the docs</b>",
+  "datedAt": "As of {today, date, short}",
+  "items": "{count, plural, offset:1 =0 {No items} =1 {One item} one {# item} other {# items}}",
+  "place": "{place, selectordinal, =1 {1st} =2 {2nd} =3 {3rd} other {#th}}",
+  "pronoun": "{gender, select, male {He} female {She} other {They}}",
+  "total": "Total: {amount, number, ::currency/USD}",
+  "welcomeBack": "{count, plural, =0 {No new messages} other {Welcome back, {name}!}}"
+}

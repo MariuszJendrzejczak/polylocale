@@ -3,14 +3,16 @@
  *
  * Reads a single locale file: the top-level JSON object must map
  * key paths (strings) to translated strings. Locale is detected from the
- * filename via `detectLocaleFromFileName`. ICU parsing is intentionally
- * deferred: every value becomes a single ICUText node holding the raw
- * string verbatim, with `TranslationValue.raw` preserved for round-trip.
+ * filename via `detectLocaleFromFileName`. Each value is parsed into the
+ * structural ICU IR via {@link parseICU}; the original `raw` is preserved
+ * on every {@link TranslationValue} so the exporter can byte-exact
+ * round-trip values that haven't been touched since import.
  *
  * Errors are thrown at the import boundary with precise messages — this
  * is user-input territory, not internal code.
  */
 
+import { parseICU } from '../icu/parse.js';
 import { detectLocaleFromFileName } from '../locale/detect.js';
 import type { ParsedFile } from '../model/compose.js';
 import type { LocaleCode, TranslationKey, TranslationValue } from '../model/types.js';
@@ -31,7 +33,9 @@ export function parseFlatJson(input: ParseFlatJsonInput): ParsedFile {
   const entries = validateFlatObject(parsed, input.fileName);
 
   const now = Date.now();
-  const keys: TranslationKey[] = entries.map(([path, raw]) => buildKey(path, locale, raw, now));
+  const keys: TranslationKey[] = entries.map(([path, raw]) =>
+    buildKey(path, locale, raw, now, input.fileName),
+  );
 
   return {
     locale,
@@ -81,9 +85,19 @@ function buildKey(
   locale: LocaleCode,
   raw: string,
   modifiedAt: number,
+  fileName: string,
 ): TranslationKey {
+  let ir;
+  try {
+    ir = parseICU(raw);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `parseFlatJson: value for key "${path}" in "${fileName}" is not valid ICU MessageFormat: ${reason}`,
+    );
+  }
   const value: TranslationValue = {
-    ir: { kind: 'text', value: raw },
+    ir,
     raw,
     reviewed: false,
     modifiedAt,
