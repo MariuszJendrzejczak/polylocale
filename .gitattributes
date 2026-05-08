@@ -1,0 +1,14 @@
+# Normalize line endings to LF in the repository — keeps diffs stable across
+# Windows, macOS, and Linux contributors. Prettier and .editorconfig already
+# enforce LF on write; this guards the index.
+* text=auto eol=lf
+
+# Binary types — never auto-convert.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.zip binary
