@@ -397,36 +397,126 @@ Each decision below uses Decision / Context / Alternatives / Consequences.
   per-format _output_ concern handled in the exporter, not a model
   change.
 
+### 3.10 Encrypted secret store (apps/app)
+
+- **Decision:** API keys for AI providers live in an IndexedDB-backed
+  store at `apps/app/src/services/secret-store.ts`. They are encrypted
+  at rest with AES-GCM (256-bit) under a key derived from a user
+  passphrase via PBKDF2-SHA256, 600 000 iterations. Each ciphertext is
+  bound to its slot name through AES-GCM Additional Authenticated Data,
+  so a blob swapped between slots fails to decrypt.
+- **Context:** §3.4 sets the policy ("encrypted IndexedDB, passphrase
+  per session"); this is the implementation. PBKDF2 iteration count
+  follows the OWASP 2023 baseline. AAD-binding the slot name closes a
+  small but real attack: anyone who can write to the user's IndexedDB
+  (a hostile browser extension, the devtools console) could otherwise
+  rename a known-good ciphertext over a target slot and have it
+  transparently decrypt.
+- **Lifecycle:** `unlock(passphrase)` derives the key. On the first
+  call ever it generates a fresh salt and a sentinel verifier
+  ciphertext; every subsequent `unlock` re-derives the key and
+  decrypts the verifier — wrong passphrase → `InvalidPassphraseError`.
+  `set` / `get` / `delete` / `list` require an unlocked store.
+  `lock()` drops the in-memory `CryptoKey`; the IDB blobs stay, the
+  next `unlock` rebuilds the key from the stored salt.
+- **Testability:** the factory takes `IDBFactory` and `Crypto` as
+  options. Tests substitute `fake-indexeddb`; production uses
+  `globalThis.indexedDB` and `globalThis.crypto`. Node 22 ships
+  WebCrypto natively, so the test runner needs no DOM environment.
+- **Consequences:** PBKDF2 at 600k iterations costs ~300–500 ms per
+  unlock on commodity hardware. Acceptable: it happens once per
+  session and the cost is what makes a stolen ciphertext blob
+  expensive to brute-force. If we ever measure the unlock as a UX
+  problem we revisit the iteration count rather than the algorithm.
+
 ---
 
-## 4. AI translation flow (preview)
+## 4. AI translation flow
 
-Designed in detail in a later session, but the shape is fixed by the model:
+Settled in session 5a. The interface is:
 
 ```ts
 interface AIProvider {
-  id: string;
+  readonly id: string;
   translate(input: {
-    nodes: readonly ICUNode[];
-    from: LocaleCode;
-    to: LocaleCode;
-    glossary?: readonly GlossaryEntry[];
-    context?: { keyPath: string; description?: string };
+    readonly nodes: readonly ICUNode[];
+    readonly from: LocaleCode;
+    readonly to: LocaleCode;
+    readonly glossary?: readonly GlossaryEntry[];
+    readonly context?: { readonly keyPath: string; readonly description?: string };
   }): Promise<readonly ICUNode[]>;
 }
 ```
 
-The provider receives `ICUNode[]` and returns `ICUNode[]` of the same shape.
-Internally each provider:
+The shared masking primitive is `collectTextNodes(nodes)` in
+`packages/ai/src/icu-walk.ts`. It returns the ordered list of every
+`ICUText.value` in the tree (depth-first across plural / select /
+selectordinal cases and tag children) plus a `reassemble(translated)`
+callback. Whatever the provider does between those two steps, the
+non-text structure is unbreakable: placeholders, plural offsets, case
+keys (`one`, `=0`, …), tag names — all preserved by construction.
 
-1. Walks the IR collecting `text` nodes.
-2. Sends only the text to the model with masked placeholders if the model
-   is text-only (DeepL, Google), or sends a structured prompt if the model
-   is LLM-based (OpenAI, Anthropic).
-3. Reassembles the IR with translated text nodes; placeholder, plural, and
-   select structures are unchanged by construction.
+### 4.1 DeepL adapter
 
-This is why the IR exists. UI never sees this complexity.
+`createDeepLProvider({ apiKey, endpoint?, fetch? })` posts to DeepL's
+JSON `/v2/translate`. Free vs Pro is auto-routed by the `:fx` API-key
+suffix; passing `endpoint` overrides the default for proxy
+deployments. The body sets `preserve_formatting: true` (capitalization
+and trailing whitespace matter for fragments around placeholders) and
+omits `tag_handling`, so DeepL treats fragments as plain text rather
+than guessing at XML.
+
+Only collected text fragments hit the wire. ICU placeholders, plural
+selectors, etc. are never serialized into the request — they live only
+in the surrounding IR that the adapter walks before and after the
+network call. If a tree carries no text at all (`{name}` only) the
+adapter returns the input unchanged without making a request.
+
+**Glossary and context** are accepted on the request shape but not
+yet sent. DeepL has a separate `/v2/glossaries` flow; wiring it in is
+a follow-up session that doesn't touch the `AIProvider` surface.
+
+### 4.2 BCP-47 ↔ DeepL locale mapping
+
+DeepL distinguishes a number of regional / scripted target locales —
+EN-US vs EN-GB, PT-BR vs PT-PT, ZH-HANS vs ZH-HANT, ES-419 — and a
+shorter, region-free source list. The mapper in
+`packages/ai/src/deepl-locales.ts` resolves a model `LocaleCode` to
+the right DeepL code, falling back from region+language to language
+alone (`pl-PL` → `PL`), and from generic to a regional default for
+the two cases DeepL deprecates as targets (`en` → `EN-US`, `pt` →
+`PT-PT`). Unsupported locales throw `UnsupportedLocaleError` so the
+UI can show an actionable message instead of an HTTP 400.
+
+### 4.3 CORS and the same-origin proxy
+
+DeepL does not return CORS headers, so a browser request from the app
+origin to `api-free.deepl.com` is blocked at preflight. The deployment
+shape is therefore **never direct**:
+
+- **Dev:** Vite's dev server proxies `/api/deepl/*` to the configured
+  upstream. The default upstream is the Free tier; setting
+  `DEEPL_API_TARGET=https://api.deepl.com` in `apps/app/.env.local`
+  switches it to Pro. The provider receives `endpoint:
+'/api/deepl/v2/translate'` so the same code path works in dev and
+  in tests (tests pass an injected `fetch`).
+- **Production:** any deployment serving the SPA needs its own
+  same-origin proxy (Cloudflare Worker, nginx, …) with the same
+  `/api/deepl/*` shape. Self-hosting documentation will cover this in
+  the deployment guide; the adapter does not change.
+- **Node / CLI:** no proxy needed — pass DeepL's real URL as
+  `endpoint` and the runtime's global `fetch` reaches it directly.
+
+### 4.4 LLM providers (deferred)
+
+The interface is identical for LLM-backed providers — they too
+receive `ICUNode[]` and return `ICUNode[]`. The masking strategy may
+differ: a structured prompt that lists every text fragment with a
+stable index and asks the model to return the same JSON shape lets us
+keep the round-trip guarantee even when individual calls translate
+many keys at once. The `context.description` and `glossary` fields
+exist on the request shape today specifically to give those providers
+something to work with later — DeepL just ignores them.
 
 ---
 
@@ -482,11 +572,13 @@ it belongs in `core` or `ai`. If no, it belongs in `ui` or `apps/app`.
 - **Session 4 (done):** nested JSON parser + exporter. Path-segmented
   keys, prefix-collision handling, cross-format equivalence with flat
   JSON.
+- **Session 5a (done):** `AIProvider` interface, `collectTextNodes`
+  masking primitive, DeepL adapter, BCP-47 ↔ DeepL locale mapping,
+  encrypted secret store in `apps/app`, Vite dev proxy for CORS.
 - **Parallel:** UI tabular editor once the model is stable (TanStack Table
   is a strong candidate; decided in the UI session).
-- **Parallel:** AI providers once one format works end-to-end. First
-  adapter likely DeepL (simplest API surface) or OpenAI (most flexible
-  prompt for structural protection).
+- **Parallel:** further AI providers (LLM-backed translators, DeepL
+  glossary integration) on top of the now-settled provider surface.
 - **Periodic:** dependency audits, refactor passes, architecture review.
 
 Roadmap is a guide, not a contract. We adjust as we learn.
