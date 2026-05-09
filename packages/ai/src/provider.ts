@@ -45,9 +45,7 @@ export class UnsupportedLocaleError extends Error {
   readonly direction: 'source' | 'target';
 
   constructor(providerId: string, locale: LocaleCode, direction: 'source' | 'target') {
-    super(
-      `${providerId}: ${direction} locale "${locale}" is not supported by this provider`,
-    );
+    super(`${providerId}: ${direction} locale "${locale}" is not supported by this provider`);
     this.name = 'UnsupportedLocaleError';
     this.providerId = providerId;
     this.locale = locale;

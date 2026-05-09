@@ -116,9 +116,7 @@ describe('collectTextNodes', () => {
   it('throws when the translated array length does not match', () => {
     const ir: readonly ICUNode[] = [{ kind: 'text', value: 'a' }];
     const collected = collectTextNodes(ir);
-    expect(() => collected.reassemble([])).toThrowError(
-      /expected 1 translated strings, got 0/,
-    );
+    expect(() => collected.reassemble([])).toThrowError(/expected 1 translated strings, got 0/);
     expect(() => collected.reassemble(['a', 'b'])).toThrowError(
       /expected 1 translated strings, got 2/,
     );

@@ -22,7 +22,9 @@ function fakeFetch(opts: FakeFetchOptions = {}) {
   const fn = vi.fn(async (url: string, init: RequestInit): Promise<Response> => {
     captured.push({ url, init });
     const body =
-      opts.bodyText !== undefined ? opts.bodyText : JSON.stringify(opts.body ?? { translations: [] });
+      opts.bodyText !== undefined
+        ? opts.bodyText
+        : JSON.stringify(opts.body ?? { translations: [] });
     return new Response(body, {
       status,
       headers: { 'Content-Type': opts.contentType ?? 'application/json' },
