@@ -1,3 +1,4 @@
-// AI translation provider abstraction.
-// Designed in a later session, alongside the first concrete provider adapter.
-export {};
+export type { AIProvider, TranslateContext, TranslateRequest } from './provider.js';
+export { ProviderHttpError, UnsupportedLocaleError } from './provider.js';
+export { collectTextNodes } from './icu-walk.js';
+export type { CollectedTexts } from './icu-walk.js';
