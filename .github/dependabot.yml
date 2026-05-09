@@ -1,0 +1,47 @@
+version: 2
+
+updates:
+  # npm / pnpm dependencies — single root entry covers the whole monorepo
+  # because pnpm-workspace.yaml hoists everything through the root lockfile.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels:
+      - dependencies
+    groups:
+      # Bundle non-major bumps so we don't drown in PRs.
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+      # Type packages move with their runtime; group them too.
+      types:
+        patterns:
+          - '@types/*'
+    ignore:
+      # Major upgrades for these get hand-curated PRs (breaking changes
+      # tend to need adapter / config work).
+      - dependency-name: react
+        update-types: ['version-update:semver-major']
+      - dependency-name: react-dom
+        update-types: ['version-update:semver-major']
+      - dependency-name: vite
+        update-types: ['version-update:semver-major']
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+
+  # GitHub Actions versions — the same drift that produced the v4→v6 bump
+  # earlier today.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - github-actions
