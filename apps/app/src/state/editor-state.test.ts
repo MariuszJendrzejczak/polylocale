@@ -231,6 +231,57 @@ describe('editorReducer', () => {
     expect(next).toBe(state);
   });
 
+  it('renameKey updates id+path, migrates dirty Set and pendingTranslations', () => {
+    let state = loaded(projectWithTwoKeys());
+    state = editorReducer(state, {
+      type: 'setValue',
+      keyPath: 'greet',
+      locale: 'pl',
+      ir: [{ kind: 'text', value: 'x' }],
+      raw: 'x',
+    });
+    expect(state.dirty.has('k1')).toBe(true);
+    state = editorReducer(state, {
+      type: 'translationStart',
+      entries: [{ keyId: 'k1', locale: 'pl' }],
+    });
+    expect(state.pendingTranslations.has(pendingKey('k1', 'pl'))).toBe(true);
+
+    state = editorReducer(state, {
+      type: 'renameKey',
+      keyId: 'k1',
+      newPath: 'hello',
+    });
+
+    const renamed = state.project!.keys.find((k) => k.path === 'hello')!;
+    expect(renamed.id).toBe('hello');
+    expect(state.project!.keys.find((k) => k.path === 'greet')).toBeUndefined();
+    expect(state.dirty.has('k1')).toBe(false);
+    expect(state.dirty.has('hello')).toBe(true);
+    expect(state.pendingTranslations.has(pendingKey('k1', 'pl'))).toBe(false);
+    expect(state.pendingTranslations.has(pendingKey('hello', 'pl'))).toBe(true);
+  });
+
+  it('renameKey is a no-op when newPath collides with another key', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, {
+      type: 'renameKey',
+      keyId: 'k1',
+      newPath: 'bye',
+    });
+    expect(next).toBe(state);
+  });
+
+  it('renameKey is a no-op when newPath equals the current path', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, {
+      type: 'renameKey',
+      keyId: 'k1',
+      newPath: 'greet',
+    });
+    expect(next).toBe(state);
+  });
+
   it('loaded resets pendingTranslations', () => {
     let state = loaded(projectWithTwoKeys());
     state = editorReducer(state, {

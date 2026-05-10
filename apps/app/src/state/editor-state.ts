@@ -103,6 +103,7 @@ export type EditorAction =
       readonly baseValue: { readonly ir: readonly ICUNode[]; readonly raw: string };
     }
   | { readonly type: 'removeKey'; readonly keyId: string }
+  | { readonly type: 'renameKey'; readonly keyId: string; readonly newPath: string }
   | { readonly type: 'markSaved'; readonly at: number }
   | { readonly type: 'banner'; readonly banner: EditorBanner | null }
   | { readonly type: 'reset' };
@@ -242,6 +243,34 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         pendingTranslations,
       };
     }
+    case 'renameKey': {
+      const project = state.project;
+      if (project === null) return state;
+      const target = project.keys.find((k) => k.id === action.keyId);
+      if (target === undefined) return state;
+      if (action.newPath === target.path) return state;
+      if (project.keys.some((k) => k.id !== action.keyId && k.path === action.newPath)) {
+        return state;
+      }
+      const newId = action.newPath;
+      const keys = project.keys.map((k) =>
+        k.id === action.keyId ? { ...k, id: newId, path: action.newPath } : k,
+      );
+      const dirty = new Set(state.dirty);
+      dirty.delete(action.keyId);
+      dirty.add(newId);
+      const pendingTranslations = renameKeyIdInPending(
+        state.pendingTranslations,
+        action.keyId,
+        newId,
+      );
+      return {
+        ...state,
+        project: { ...project, keys },
+        dirty,
+        pendingTranslations,
+      };
+    }
     case 'markSaved': {
       return { ...state, dirty: new Set(), lastSavedAt: action.at, banner: null };
     }
@@ -285,6 +314,26 @@ function updateKeyValue(
   });
   if (!changed) return project;
   return { ...project, keys };
+}
+
+function renameKeyIdInPending(
+  current: ReadonlyMap<string, PendingTranslation>,
+  oldId: string,
+  newId: string,
+): ReadonlyMap<string, PendingTranslation> {
+  if (current.size === 0 || oldId === newId) return current;
+  const oldPrefix = `${oldId}:`;
+  let mutated = false;
+  const next = new Map<string, PendingTranslation>();
+  for (const [k, v] of current) {
+    if (k.startsWith(oldPrefix)) {
+      next.set(`${newId}:${k.slice(oldPrefix.length)}`, v);
+      mutated = true;
+    } else {
+      next.set(k, v);
+    }
+  }
+  return mutated ? next : current;
 }
 
 function pruneByKeyId(

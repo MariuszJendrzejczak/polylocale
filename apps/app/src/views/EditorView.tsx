@@ -531,8 +531,10 @@ export function EditorView(): ReactElement {
         cell: (row: TranslationKey) => (
           <KeyCell
             row={row}
+            project={project}
             onTranslateMissing={() => onTranslateRowMissing(row)}
             onDelete={(keyId) => dispatch({ type: 'removeKey', keyId })}
+            onRename={(keyId, newPath) => dispatch({ type: 'renameKey', keyId, newPath })}
           />
         ),
       },

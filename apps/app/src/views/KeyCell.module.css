@@ -85,3 +85,26 @@
   background: var(--color-error-strong, #a93226);
   border-color: var(--color-error-strong, #a93226);
 }
+
+.renameInput {
+  width: 100%;
+  padding: 4px 6px;
+  background: var(--color-bg, #fff);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  font-family: var(--font-stack-mono);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+}
+
+.renameInput:focus {
+  outline: 2px solid var(--color-focus, #4c8bf5);
+  outline-offset: -1px;
+}
+
+.renameError {
+  font-size: var(--font-size-xs);
+  color: var(--color-error, #c0392b);
+  margin-top: 2px;
+}

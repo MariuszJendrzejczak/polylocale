@@ -5,11 +5,12 @@ import styles from './RowTranslateMenu.module.css';
 export interface RowTranslateMenuProps {
   readonly disabled?: boolean;
   readonly onTranslateMissing: () => void;
+  readonly onRename?: () => void;
   readonly onDelete?: () => void;
 }
 
 export function RowTranslateMenu(props: RowTranslateMenuProps): ReactElement {
-  const { disabled = false, onTranslateMissing, onDelete } = props;
+  const { disabled = false, onTranslateMissing, onRename, onDelete } = props;
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLSpanElement>(null);
 
@@ -61,6 +62,20 @@ export function RowTranslateMenu(props: RowTranslateMenuProps): ReactElement {
           >
             Translate missing locales
           </button>
+          {onRename !== undefined && (
+            <button
+              type="button"
+              className={styles.menuItem}
+              role="menuitem"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+                onRename();
+              }}
+            >
+              Rename key
+            </button>
+          )}
           {onDelete !== undefined && (
             <button
               type="button"
