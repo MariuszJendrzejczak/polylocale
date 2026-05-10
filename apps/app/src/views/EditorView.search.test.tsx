@@ -113,4 +113,3 @@ describe('EditorView search filter (smoke)', (): void => {
     expect(screen.getByText('farewell')).toBeInTheDocument();
   });
 });
-

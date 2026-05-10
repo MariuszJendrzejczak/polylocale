@@ -52,7 +52,8 @@ export function KeyCell({
       : validateKeyPath(draftTrimmed, project, { excludeKeyId: row.id });
   const renameError =
     renameResult !== null && !renameResult.ok ? describePathError(renameResult.reason) : null;
-  const canCommitRename = renaming && draftTrimmed !== '' && draftTrimmed !== row.path && renameError === null;
+  const canCommitRename =
+    renaming && draftTrimmed !== '' && draftTrimmed !== row.path && renameError === null;
 
   function commitRename(): void {
     if (!canCommitRename) return;

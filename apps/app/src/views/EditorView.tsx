@@ -12,7 +12,12 @@ import { renderICU, type LocaleCode, type TranslationKey } from '@polylocale/cor
 import { Table, type TableColumn } from '@polylocale/ui';
 import type { OnChangeFn, SortingState } from '@tanstack/react-table';
 
-import { createAIProviderHost } from '../services/ai-provider-host.js';
+import {
+  createAIProviderHost,
+  PROVIDER_IDS,
+  providerLabel,
+  type ProviderId,
+} from '../services/ai-provider-host.js';
 import {
   composeFromLoaded,
   downloadFiles,
@@ -49,11 +54,26 @@ import { CellEditor } from './CellEditor.js';
 import { FillMissingButton } from './FillMissingButton.js';
 import { KeyCell } from './KeyCell.js';
 import { PassphrasePrompt } from './PassphrasePrompt.js';
+import { SettingsModal } from './SettingsModal.js';
 import { sortByStatus } from './sort/status-priority.js';
 import { useDebouncedValue } from './use-debounced-value.js';
 import styles from './EditorView.module.css';
 
-const DEEPL_KEY_SLOT = 'deepl-api-key';
+interface ApiKeyGate {
+  readonly slot: string;
+  readonly providerLabel: string;
+  readonly resolve: (success: boolean) => void;
+}
+
+function effectiveProvider(
+  prefs: { default?: string; perLocale?: Readonly<Record<string, string>> } | undefined,
+  locale: string,
+): ProviderId {
+  const candidate = prefs?.perLocale?.[locale] ?? prefs?.default ?? 'deepl';
+  return (PROVIDER_IDS as readonly string[]).includes(candidate)
+    ? (candidate as ProviderId)
+    : 'deepl';
+}
 
 interface ReopenPrompt {
   readonly handle: FileSystemDirectoryHandle;
@@ -71,6 +91,7 @@ type BatchState =
   | {
       readonly phase: 'review';
       readonly title: string;
+      readonly providerId: ProviderId;
       readonly outcomes: readonly TranslationOutcome[];
     };
 
@@ -80,7 +101,7 @@ export function EditorView(): ReactElement {
   const initRef = useRef(false);
   const [reopen, setReopen] = useState<ReopenPrompt | null>(null);
   const [unlockGate, setUnlockGate] = useState<((success: boolean) => void) | null>(null);
-  const [apiKeyGate, setApiKeyGate] = useState<((success: boolean) => void) | null>(null);
+  const [apiKeyGate, setApiKeyGate] = useState<ApiKeyGate | null>(null);
 
   const secretStore = useMemo(() => createSecretStore({ idb: globalThis.indexedDB }), []);
 
@@ -96,11 +117,15 @@ export function EditorView(): ReactElement {
   );
 
   const requestApiKey = useCallback(
-    (): Promise<boolean> =>
+    (slot: string, label: string): Promise<boolean> =>
       new Promise<boolean>((resolve) => {
-        setApiKeyGate(() => (success: boolean) => {
-          setApiKeyGate(null);
-          resolve(success);
+        setApiKeyGate({
+          slot,
+          providerLabel: label,
+          resolve: (success: boolean) => {
+            setApiKeyGate(null);
+            resolve(success);
+          },
         });
       }),
     [],
@@ -117,6 +142,15 @@ export function EditorView(): ReactElement {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [statusSortDir, setStatusSortDir] = useState<'asc' | 'desc' | null>(null);
   const [addFormOpen, setAddFormOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const onOpenSettings = useCallback(async () => {
+    if (!secretStore.isUnlocked()) {
+      const ok = await requestUnlock();
+      if (!ok) return;
+    }
+    setSettingsOpen(true);
+  }, [secretStore, requestUnlock]);
 
   const onSortingChange = useCallback<OnChangeFn<SortingState>>((updater) => {
     setStatusSortDir(null);
@@ -129,9 +163,13 @@ export function EditorView(): ReactElement {
   }, []);
 
   const runBatch = useCallback(
-    async (jobs: readonly TranslationJob[], title: string): Promise<void> => {
+    async (
+      jobs: readonly TranslationJob[],
+      title: string,
+      providerId: ProviderId,
+    ): Promise<void> => {
       if (jobs.length === 0 || state.project === null) return;
-      const provider = await aiHost.getProvider();
+      const provider = await aiHost.getProvider(providerId);
       if (provider === null) return;
       dispatch({
         type: 'translationStart',
@@ -171,7 +209,7 @@ export function EditorView(): ReactElement {
             });
           }
         }
-        setBatch({ phase: 'review', outcomes, title });
+        setBatch({ phase: 'review', outcomes, title, providerId });
       } catch (err) {
         dispatch({
           type: 'translationClear',
@@ -194,7 +232,13 @@ export function EditorView(): ReactElement {
         state.pendingTranslations,
       );
       if (jobs.length === 0) return;
-      void runBatch(jobs, `Translate missing for ${key.path}`);
+      // Mixed-locale row → use the project default (the user can still
+      // override per-locale via the cell popover).
+      const providerId = effectiveProvider(
+        state.project.settings.aiProviderPrefs,
+        state.project.baseLocale,
+      );
+      void runBatch(jobs, `Translate missing for ${key.path}`, providerId);
     },
     [runBatch, state.pendingTranslations, state.project],
   );
@@ -215,13 +259,15 @@ export function EditorView(): ReactElement {
         });
         return;
       }
-      void runBatch(jobs, `Fill missing for ${locale}`);
+      const providerId = effectiveProvider(state.project.settings.aiProviderPrefs, locale);
+      void runBatch(jobs, `Fill missing for ${locale}`, providerId);
     },
     [runBatch, dispatch, state.pendingTranslations, state.project],
   );
 
   const onApplyBatch = useCallback(
     (accepted: readonly AcceptedTranslation[]): void => {
+      const providerId = batch?.phase === 'review' ? batch.providerId : 'deepl';
       if (accepted.length > 0) {
         dispatch({
           type: 'setValuesBatch',
@@ -231,7 +277,7 @@ export function EditorView(): ReactElement {
             ir: a.ir,
             raw: a.raw,
             source: 'ai',
-            aiProvider: 'deepl',
+            aiProvider: providerId,
           })),
         });
       }
@@ -470,9 +516,11 @@ export function EditorView(): ReactElement {
         const issues = deriveCellIssues(row, locale, baseLocale);
         const pending = pendingTranslations.get(pendingKey(row.id, locale));
         const showAi = locale !== baseLocale && (issues.missing || issues.empty);
+        const cellProviderId = effectiveProvider(project.settings.aiProviderPrefs, locale);
         const aiAction = showAi ? (
           <AiCellAction
             host={aiHost}
+            providerId={cellProviderId}
             keyId={row.id}
             keyPath={row.path}
             locale={locale}
@@ -503,7 +551,7 @@ export function EditorView(): ReactElement {
                 ir,
                 raw,
                 source: 'ai',
-                aiProvider: 'deepl',
+                aiProvider: cellProviderId,
               })
             }
           />
@@ -563,9 +611,7 @@ export function EditorView(): ReactElement {
               <select
                 className={styles.baseSelect}
                 value={project.baseLocale}
-                onChange={(e) =>
-                  dispatch({ type: 'setBaseLocale', locale: e.currentTarget.value })
-                }
+                onChange={(e) => dispatch({ type: 'setBaseLocale', locale: e.currentTarget.value })}
                 aria-label="Base locale"
               >
                 {project.locales.map((l) => (
@@ -575,6 +621,24 @@ export function EditorView(): ReactElement {
                 ))}
               </select>
               <span className={styles.subtle}>· {project.keys.length} keys</span>
+              <span className={styles.subtle}>· AI</span>
+              <select
+                className={styles.baseSelect}
+                value={project.settings.aiProviderPrefs?.default ?? 'deepl'}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'setAiProviderPref',
+                    default: e.currentTarget.value,
+                  })
+                }
+                aria-label="Default AI provider"
+              >
+                {PROVIDER_IDS.map((id) => (
+                  <option key={id} value={id}>
+                    {providerLabel(id)}
+                  </option>
+                ))}
+              </select>
               {state.fsMode === 'fallback' && (
                 <span className={styles.fsTag} title="Browser does not support directory writeback">
                   fallback
@@ -613,6 +677,16 @@ export function EditorView(): ReactElement {
               aria-pressed={addFormOpen}
             >
               + Add key
+            </button>
+          )}
+          {project !== null && (
+            <button
+              type="button"
+              className={styles.button}
+              onClick={() => void onOpenSettings()}
+              aria-label="Open settings"
+            >
+              ⚙ Settings
             </button>
           )}
           {project === null && reopen !== null && (
@@ -706,9 +780,16 @@ export function EditorView(): ReactElement {
       {apiKeyGate !== null && (
         <ApiKeyPrompt
           secretStore={secretStore}
-          slot={DEEPL_KEY_SLOT}
-          providerLabel="DeepL"
-          onResolved={apiKeyGate}
+          slot={apiKeyGate.slot}
+          providerLabel={apiKeyGate.providerLabel}
+          onResolved={apiKeyGate.resolve}
+        />
+      )}
+      {settingsOpen && (
+        <SettingsModal
+          secretStore={secretStore}
+          onClose={() => setSettingsOpen(false)}
+          onSlotMutated={(id) => aiHost.reset(id)}
         />
       )}
       {batch?.phase === 'running' && (

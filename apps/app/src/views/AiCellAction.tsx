@@ -3,12 +3,17 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from 'rea
 import { renderICU, type ICUNode, type LocaleCode, type TranslationValue } from '@polylocale/core';
 import { collectTextNodes, UnsupportedLocaleError } from '@polylocale/ai';
 
-import type { AIProviderHost } from '../services/ai-provider-host.js';
+import {
+  providerLabel,
+  type AIProviderHost,
+  type ProviderId,
+} from '../services/ai-provider-host.js';
 
 import styles from './AiCellAction.module.css';
 
 export interface AiCellActionProps {
   readonly host: AIProviderHost;
+  readonly providerId: ProviderId;
   readonly keyId: string;
   readonly keyPath: string;
   readonly locale: LocaleCode;
@@ -31,6 +36,7 @@ interface PopoverState {
 export function AiCellAction(props: AiCellActionProps): ReactElement | null {
   const {
     host,
+    providerId,
     keyPath,
     locale,
     baseLocale,
@@ -90,7 +96,7 @@ export function AiCellAction(props: AiCellActionProps): ReactElement | null {
   async function onClick(): Promise<void> {
     if (isPending || popover !== null) return;
 
-    const provider = await host.getProvider();
+    const provider = await host.getProvider(providerId);
     if (provider === null) return; // user cancelled a gate; no banner
 
     onStart();
@@ -164,7 +170,9 @@ export function AiCellAction(props: AiCellActionProps): ReactElement | null {
                 <div className={styles.before}>{renderICU(baseValue!.ir)}</div>
               </div>
               <div className={styles.section}>
-                <div className={styles.label}>{locale}</div>
+                <div className={styles.label}>
+                  {locale} <span className={styles.muted}>· via {providerLabel(providerId)}</span>
+                </div>
                 <div className={styles.after}>{popover.suggestion.raw}</div>
               </div>
               <div className={styles.actions}>

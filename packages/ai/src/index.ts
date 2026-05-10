@@ -1,6 +1,14 @@
 export type { AIProvider, TranslateContext, TranslateRequest } from './provider.js';
-export { ProviderHttpError, UnsupportedLocaleError } from './provider.js';
+export { LLMResponseError, ProviderHttpError, UnsupportedLocaleError } from './provider.js';
 export { collectTextNodes } from './icu-walk.js';
 export type { CollectedTexts } from './icu-walk.js';
 export { createDeepLProvider } from './deepl.js';
 export type { DeepLProviderOptions } from './deepl.js';
+export { createDeepLGlossaryService } from './deepl-glossary.js';
+export type { DeepLGlossaryService, DeepLGlossaryServiceOptions } from './deepl-glossary.js';
+export { createOpenAIProvider } from './openai.js';
+export type { OpenAIProviderOptions } from './openai.js';
+export { createAnthropicProvider } from './anthropic.js';
+export type { AnthropicProviderOptions } from './anthropic.js';
+export { llmTranslateFragments, MAX_FRAGMENTS_PER_CALL } from './llm-translate.js';
+export type { LlmChat, LlmChatRequest, LlmTranslateOptions } from './llm-translate.js';

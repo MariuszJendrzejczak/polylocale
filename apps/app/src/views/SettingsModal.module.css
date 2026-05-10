@@ -1,0 +1,240 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 20, 25, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 24px;
+}
+
+.card {
+  background: var(--color-bg);
+  border-radius: 8px;
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.22),
+    0 0 0 1px var(--color-border);
+  width: 100%;
+  max-width: 560px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+.closeButton {
+  background: transparent;
+  border: 0;
+  color: var(--color-text-muted);
+  font-size: 20px;
+  line-height: 1;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.closeButton:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+}
+
+.body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 4px 0;
+}
+
+.section {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.section:last-child {
+  border-bottom: 0;
+}
+
+.sectionHeading {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+
+.empty {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(80px, 110px) 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.providerLabel {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+}
+
+.status {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.statusConfigured {
+  color: var(--color-text);
+}
+
+.mask {
+  font-family: var(--font-stack-mono);
+  font-size: var(--font-size-sm);
+  background: var(--color-bg-app);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.rowActions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.confirmRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-sm);
+  color: var(--color-status-missing-fg);
+}
+
+.passphraseForm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.input {
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg-input, var(--color-bg));
+  padding: 8px 10px;
+  font-size: var(--font-size-md);
+  font-family: var(--font-stack-mono);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-border-input-focus, #1d4ed8);
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.18);
+}
+
+.input:disabled {
+  background: var(--color-bg-app);
+  color: var(--color-text-muted);
+}
+
+.formActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.error {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-status-missing-fg);
+  background: var(--color-status-missing-bg);
+  padding: 6px 10px;
+  border-radius: 4px;
+}
+
+.notice {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-status-modified-fg);
+  background: var(--color-status-modified-bg);
+  padding: 6px 10px;
+  border-radius: 4px;
+}
+
+.button {
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-bg-button);
+  color: var(--color-text-button);
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+}
+
+.button:disabled {
+  background: var(--color-bg-button-disabled);
+  color: var(--color-text-button-disabled);
+  cursor: not-allowed;
+  border-color: var(--color-bg-button-disabled);
+}
+
+.primary {
+  background: var(--color-bg-button-primary);
+  border-color: var(--color-bg-button-primary);
+  color: var(--color-text-button-primary);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--color-bg-button-primary-hover);
+  border-color: var(--color-bg-button-primary-hover);
+}
+
+.primary:disabled {
+  background: var(--color-bg-button-disabled);
+  border-color: var(--color-bg-button-disabled);
+  color: var(--color-text-button-disabled);
+}
+
+.danger {
+  background: var(--color-status-missing-bg);
+  border-color: var(--color-status-missing-fg);
+  color: var(--color-status-missing-fg);
+}
+
+.danger:hover:not(:disabled) {
+  background: var(--color-status-missing-fg);
+  color: #fff;
+}

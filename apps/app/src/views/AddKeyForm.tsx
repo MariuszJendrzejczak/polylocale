@@ -30,8 +30,7 @@ export function AddKeyForm({ project, onSubmit, onCancel }: AddKeyFormProps): Re
     }
   }
 
-  const canSubmit =
-    trimmedPath !== '' && pathError === null && raw !== '' && parsedIr !== null;
+  const canSubmit = trimmedPath !== '' && pathError === null && raw !== '' && parsedIr !== null;
 
   function handleSubmit(e: FormEvent): void {
     e.preventDefault();
@@ -70,9 +69,7 @@ export function AddKeyForm({ project, onSubmit, onCancel }: AddKeyFormProps): Re
           placeholder="Welcome, {name}!"
           rows={2}
         />
-        {parseError !== null && (
-          <span className={styles.error}>ICU parse error: {parseError}</span>
-        )}
+        {parseError !== null && <span className={styles.error}>ICU parse error: {parseError}</span>}
       </div>
       <div className={styles.actions}>
         <button type="button" className={styles.button} onClick={onCancel}>

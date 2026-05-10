@@ -36,10 +36,24 @@ What's been built so far (verify with `git log --oneline`):
   permission re-prompt on reload, inline cell editor (re-parses ICU on
   commit), per-cell status badges, manual save-back to disk through the
   exporter.
+- ✅ **Session 6** — AI translate inside the editor: per-cell ✦, per-row
+  "translate missing", per-locale "fill missing", concurrency-limited
+  orchestrator, review-before-apply batch modal, passphrase + API-key
+  prompts driving the lazy `ai-provider-host`.
+- ✅ **Session 7** — editor UX: search-by-key-or-value, status sort and
+  per-column sort headers, add / remove / rename keys with path
+  validation, runtime base-locale switch.
+- ✅ **Session 8** — additional AI providers (OpenAI + Anthropic LLM
+  adapters with shared masking via `llm-translate.ts`) and DeepL
+  glossary integration (`/v2/glossaries` create/lookup, deterministic
+  cache key, language-pair check).
+- ✅ **Session 9** — Settings modal for AI keys + passphrase rotation:
+  inspect / add / replace / delete per-provider slots, change
+  passphrase in one atomic IDB transaction, `aiHost.reset()` on every
+  mutation so the next translation rebuilds against the new key.
 
-What's next: **session 6 (AI in the editor)**, **session 7 (editor UX:
-search + key add/remove/rename + sort)**, **session 8 (more AI
-providers + DeepL glossary)**.
+What's next: **session 10 (glossary UI)**, **session 11 (diff view)**,
+**session 12 (CSV / XLSX translator handoff)**.
 
 ---
 
@@ -313,34 +327,466 @@ DoD:
 
 ---
 
+## Session 9 — Settings panel: API keys & passphrase management
+
+The encrypted secret store, passphrase prompt and per-provider key
+prompt all exist (Sessions 5a / 7 / 8) but they only surface
+just-in-time, when a translation needs them. There is no way today
+to inspect which provider keys are configured, rotate one, drop one,
+or change the passphrase without going through the IndexedDB
+DevTools panel. This session builds that surface.
+
+The whole feature lives in `apps/app`; `core` and `ai` don't change.
+The secret store gains one new method (`changePassphrase`); everything
+else is React + the existing services.
+
+**Paste into a new Claude Code session in `polylocale`:**
+
+```
+Session 9 — Settings panel for API keys & passphrase.
+
+Read CLAUDE.md, PROJECT.md, ARCHITECTURE.md (§3.10, §4.5). Check
+`git log`. Start in plan mode.
+
+Goal: a Settings panel reachable from the topbar that lets the user
+(a) see at a glance which provider keys are configured, (b) add /
+update / delete a key per provider slot, and (c) change the
+passphrase that protects the encrypted secret store. Nothing in
+`packages/core` or `packages/ai` changes — the AIProvider surface,
+the secret store crypto, and the lazy-prompt flow stay as they are.
+This session is purely apps/app.
+
+Decide upfront (in plan mode):
+- Settings surface — modal vs side drawer vs separate route. Default
+  to a modal (consistent with existing PassphrasePrompt /
+  ApiKeyPrompt aesthetics; no router yet in the app). Spell out the
+  reason in the plan.
+- "Key configured" indicator — never reveal the key value. Show
+  presence + length (`••••••••12`-style) and the slot's provider
+  label. The store has no read-by-prefix API; rely on
+  `secretStore.list()` plus the slot constants from
+  `services/ai-provider-host.ts`.
+- Passphrase change flow — must re-encrypt every existing slot
+  under the new key. Either (a) extend SecretStore with
+  `changePassphrase(oldPp, newPp)` that walks every slot once, or
+  (b) push the read-decrypt-encrypt loop into apps/app. (a) keeps
+  the WebCrypto code in the same module — recommend (a).
+
+Scope:
+
+1. `packages/ai`, `packages/core`: NO CHANGES.
+
+2. `apps/app/src/services/secret-store.ts`:
+   - Add `changePassphrase(oldPassphrase: string, newPassphrase:
+     string): Promise<void>`. Verifies `oldPassphrase` against the
+     verifier; reads every existing slot's plaintext under the old
+     key; generates a fresh salt, derives a new key, re-writes the
+     verifier under the new key; re-encrypts every slot under the
+     new key (preserving slot names and AAD binding); commits
+     transactionally where IDB allows. On any decryption failure
+     mid-rotation, abort without mutating IDB and rethrow.
+   - Update `secret-store.test.ts`: round-trip through a passphrase
+     change; `changePassphrase` with the wrong old passphrase
+     throws `InvalidPassphraseError`; previously stored slots
+     decrypt under the new passphrase; the verifier matches the
+     new passphrase, not the old one.
+
+3. `apps/app/src/services/ai-provider-host.ts`:
+   - Export a small helper `getProviderRegistry()` (or extend the
+     existing `__test.PROVIDER_SLOTS`) so the Settings view can map
+     `slot → providerId → label` without hard-coding strings.
+   - The host itself does not change behaviourally.
+
+4. `apps/app/src/views/SettingsModal.tsx` (new) +
+   `SettingsModal.module.css`:
+   - Header: "Settings". Close button.
+   - Section "AI provider keys": one row per `ProviderId` (DeepL,
+     OpenAI, Anthropic). Row shows: provider label, slot status
+     (`Not configured` / `Configured · ••••••••<last 4>`), and an
+     action button (`Add key` / `Replace` / `Delete`).
+   - "Add key" / "Replace" reuses the existing `ApiKeyPrompt` (the
+     prompt component already takes `slot` + `providerLabel`).
+   - "Delete" prompts a confirm step inline (no extra modal —
+     a tiny "Are you sure? Cancel | Delete" row replacing the
+     button) then dispatches `secretStore.delete(slot)` and
+     re-reads `list()`.
+   - Section "Passphrase": one button "Change passphrase…" that
+     opens a small inline form (current passphrase + new + confirm
+     new). On submit calls `secretStore.changePassphrase`. Errors
+     surface inline; success closes the form and shows a transient
+     "Passphrase updated" notice in the modal.
+   - Empty-store states are explicit ("No keys configured yet —
+     translation flows will prompt as needed").
+   - The whole modal reads `secretStore.list()` once on open, then
+     re-reads after every mutation; nothing is cached longer.
+
+5. `apps/app/src/views/EditorView.tsx`:
+   - Add a "⚙ Settings" button to the topbar (next to "+ Add key"
+     or in a small kebab — your call in plan mode). Clicking it
+     opens the modal.
+   - Open requires the store to be unlocked. If locked, route
+     through the existing `requestUnlock` gate first (same pattern
+     `aiHost.getProvider` uses); cancel = no-op.
+   - On any provider-slot mutation from the modal, call
+     `aiHost.reset(providerId)` so the cached AIProvider rebuilds
+     against the new key on next use.
+
+6. Tests:
+   - `secret-store.test.ts` — passphrase rotation round-trip plus
+     wrong-old-passphrase failure (above).
+   - New `SettingsModal.test.tsx` (Testing Library smoke):
+     opens with two configured slots → renders both as
+     "Configured" with the right label; clicking Delete then
+     confirming removes the slot from the rendered list and
+     calls `secretStore.delete`.
+   - Smoke test for the EditorView "⚙ Settings" button: click
+     opens the modal when the store is unlocked.
+
+7. ARCHITECTURE.md:
+   - Extend §3.10 with the `changePassphrase` lifecycle (verify
+     old → re-derive → re-encrypt every slot → swap verifier),
+     and the failure model (abort without mutation on
+     decryption failure).
+   - One-line pointer in §4.5 to the Settings modal as the
+     canonical "where do I see / rotate keys" surface.
+
+DoD:
+- Open the dev server, open Settings, see DeepL / OpenAI /
+  Anthropic rows with their current slot status.
+- Add a key for one provider via the modal, see it become
+  "Configured", trigger a translation in the editor — host uses
+  it without re-prompting.
+- Delete that key, see the row flip to "Not configured", trigger
+  a translation — the editor re-prompts via the existing
+  ApiKeyPrompt.
+- Change the passphrase, lock the store (close + reopen the
+  app), unlock with the new passphrase, every previously-stored
+  slot still decrypts cleanly.
+- All previous tests green; pipeline green; push; CI green.
+```
+
+---
+
+## Session 10 — Glossary UI
+
+Editor-side surface for the `glossary` field on `LocalizationProject`.
+The AI providers already accept `glossary` as of Session 8; this
+session gives the user a way to populate, edit, and persist the
+terms. Glossary entries flow into the LLM system prompt as advisory
+hints and into DeepL as a real `glossary_id` (see ARCHITECTURE.md
+§4.6 / §4.7).
+
+**Paste into a new Claude Code session in `polylocale`:**
+
+```
+Session 10 — Glossary editor + per-project persistence.
+
+Read CLAUDE.md, PROJECT.md, ARCHITECTURE.md. Check `git log`. Start
+in plan mode.
+
+Goal: ship a small editor surface for `LocalizationProject.glossary`
+— add / edit / remove `GlossaryEntry`s with per-locale `translation`
+or `doNotTranslate: true`. Persist alongside project state so the
+glossary survives a reload. The AI side is already wired; this
+session just feeds it.
+
+Decide upfront (in plan mode):
+- Storage: where does the glossary live across reloads? Today
+  `apps/app/src/services/persistence.ts` only stashes a directory
+  handle and a small `EditorMeta`. Two options:
+  (a) extend `EditorMeta` with `glossary`,
+  (b) write a sibling project file (e.g. `.polylocale.json`) into
+  the user's project directory.
+  Recommend (a) for this session — keep persistence minimal; (b)
+  becomes the right place once the project file exists for real.
+- Editor surface: a dedicated route is overkill. Use a modal-style
+  panel reachable from the topbar (consistent with Session 9's
+  Settings).
+- Rendering rule: glossary entries with no usable target for the
+  current base locale should NOT be silently dropped — show them
+  with a "(no entry for <baseLocale>)" hint. The UI never edits
+  away data the user can't see.
+
+Scope:
+
+1. `packages/core/src/model/types.ts`: NO SHAPE CHANGE.
+   `GlossaryEntry` already carries `term`, `perLocale`, `notes?`.
+
+2. `apps/app/src/state/editor-state.ts`:
+   - Add reducer actions: `addGlossaryEntry`, `removeGlossaryEntry`,
+     `updateGlossaryEntry` (term, perLocale, notes).
+   - The dispatch from the modal mutates `state.project.glossary`
+     immutably and does NOT touch `dirty` (glossary lives at the
+     project level, not the key level).
+
+3. `apps/app/src/services/persistence.ts`:
+   - Extend `EditorMeta` with `glossary?: readonly GlossaryEntry[]`.
+     Writers (`saveEditorMeta`) include it; readers
+     (`loadEditorMeta`) hydrate it; the `loaded` action threads
+     it into `project.glossary`.
+   - DO NOT touch the directory-handle store.
+
+4. `apps/app/src/views/GlossaryModal.tsx` (new) +
+   `GlossaryModal.module.css`:
+   - List of terms with inline edit (term + per-locale rows; one
+     row per `project.locales`, with `translation` text input or
+     `Don't translate` toggle).
+   - "Add term" button at the top.
+   - Delete button per row with inline confirm (same pattern as
+     Session 9 Settings).
+   - Search/filter by term substring.
+   - Empty state: "No glossary terms yet — they'll be passed to
+     OpenAI/Anthropic as hints and to DeepL via /v2/glossaries
+     when configured."
+
+5. `apps/app/src/views/EditorView.tsx`:
+   - Add "📖 Glossary" button to the topbar near Settings.
+   - Pass `state.project.glossary` and dispatch handlers to
+     `GlossaryModal`.
+   - When triggering a translation (per-cell, per-row,
+     per-locale), thread `glossary: project.glossary` through the
+     `provider.translate` call (currently we don't pass it).
+
+6. Tests:
+   - `editor-state.test.ts` — add/update/remove reducer coverage,
+     and that glossary changes don't dirty individual keys.
+   - `GlossaryModal.test.tsx` — Testing Library smoke: list a
+     fixture project's terms, add one, edit one, delete one;
+     each fires the right dispatch.
+   - `persistence.ts` — round-trip including glossary.
+   - One end-to-end-ish test: a translation request from the
+     editor passes the current glossary to `provider.translate`.
+
+7. ARCHITECTURE.md:
+   - Short note in §4 that the glossary now actually flows into
+     `provider.translate({ glossary })` from the editor (the
+     wire was there since Session 8; this connects it).
+
+DoD:
+- Open Glossary, add a term `polylocale → keep verbatim`,
+  trigger a translation that contains "polylocale" — the LLM
+  prompt visibly includes the term as a hint (verify via the
+  test mock); the DeepL adapter creates / reuses a glossary id
+  if the language pair is supported.
+- Reload the app, glossary terms still appear.
+- Removing the last term leaves the project clean — no dangling
+  empty `glossary: []` in `EditorMeta`.
+- All previous tests green; pipeline green; push; CI green.
+```
+
+---
+
+## Session 11 — Diff view
+
+A side-by-side comparison surface to spot meaningful translation
+divergence: pick two locales (or two project snapshots) and see
+only the keys where the values differ structurally. Critical for
+reviewing inbound human translations and catching placeholder
+mismatches before they land in production.
+
+**Paste into a new Claude Code session in `polylocale`:**
+
+```
+Session 11 — Diff view for translations.
+
+Read CLAUDE.md, PROJECT.md, ARCHITECTURE.md. Check `git log`. Start
+in plan mode.
+
+Goal: a diff view that shows, for a project, only the keys where
+two locales differ in a way that matters — placeholder mismatch,
+plural/select case key drift, missing translations, or
+structurally different IR. Pure surface and `core`-side helper —
+no AI, no persistence changes.
+
+Decide upfront (in plan mode):
+- Diff primitive: write `icuStructuralEqual(a, b)` in
+  `packages/core/src/icu/` that compares two `ICUNode[]` ignoring
+  text content but enforcing identical placeholder names, plural
+  selector keys, tag names, and offsets. This is the "do these
+  two messages have the same skeleton" check.
+- Surface: separate route or a tab inside EditorView? Default to
+  a top-level tab toggle in the existing topbar ("Editor | Diff")
+  since there's still no router. State stays in `EditorState`
+  via a small `view: 'editor' | 'diff'` field.
+- Two-locale vs project-snapshot: scope only two-locale diff for
+  this session. Project-snapshot diff (compare against the last
+  saved version) is a Session-N+1 feature — don't smuggle it in.
+
+Scope:
+
+1. `packages/core/src/icu/structural-equal.ts` (new) +
+   `structural-equal.test.ts`:
+   - `icuStructuralEqual(a: readonly ICUNode[], b: readonly
+     ICUNode[]): boolean`.
+   - Recursive walk: same kind ordering; placeholder names match
+     exactly; plural/select cases must have identical key sets and
+     identical offsets; tag names match; text content ignored.
+   - Property-based test with `fast-check`: any tree is
+     structurally-equal to itself; swapping text leaves keeps
+     structural equality; renaming a placeholder breaks it;
+     dropping a plural case breaks it.
+
+2. `packages/core/src/index.ts`: re-export the helper.
+
+3. `apps/app/src/state/editor-state.ts`:
+   - Add `view: 'editor' | 'diff'` (default `'editor'`) and a
+     `setView` action.
+   - Add `diffSelection: { left: LocaleCode; right: LocaleCode }
+     | null` and a `setDiffSelection` action.
+
+4. `apps/app/src/views/DiffView.tsx` (new) +
+   `DiffView.module.css`:
+   - Top: two `<select>`s for left/right locale, defaulted to
+     base locale + the first non-base.
+   - List of rows where:
+     • either side is missing,
+     • either side is empty,
+     • `icuStructuralEqual(left.ir, right.ir)` is false.
+   - Each row shows: key path, left rendered text, right rendered
+     text, and a small badge for the divergence reason
+     ("missing", "structural mismatch", "empty").
+   - Click on a row → switches back to Editor with the row
+     scrolled into view (use the existing TanStack table API or
+     plain `scrollIntoView`; whichever is least invasive).
+
+5. `apps/app/src/views/EditorView.tsx`:
+   - Add a topbar tab toggle ("Editor | Diff") that flips
+     `state.view`.
+   - When `state.view === 'diff'`, render `DiffView` instead of
+     the table.
+
+6. Tests:
+   - `structural-equal.test.ts` — placeholder rename, plural
+     case drop, select key drop, nested tag name change,
+     identical-with-different-text → covered.
+   - `editor-state.test.ts` — `setView` and `setDiffSelection`
+     reducers.
+   - `DiffView.test.tsx` — Testing Library smoke: a fixture
+     project with one missing, one structurally-different key
+     renders both with the right reason badge.
+
+7. ARCHITECTURE.md:
+   - One sub-section under §2 documenting `icuStructuralEqual`
+     as the canonical "did the meaning of this message change"
+     primitive (vs. byte equality of `raw`).
+
+DoD:
+- Switch to Diff tab in dev: pick `en` vs `pl`, only the rows
+  that actually need attention show.
+- Renaming `{count}` to `{n}` in one locale puts the row in the
+  diff list with a "structural mismatch" badge.
+- All previous tests green; pipeline green; push; CI green.
+```
+
+---
+
+## Session 12 — CSV / XLSX export-import for translator handoff
+
+Sometimes the right next step isn't AI — it's a human translator
+agency that wants a spreadsheet. This session adds round-trip CSV /
+XLSX support that re-merges by key path with conflict reporting,
+without touching the source-of-truth ARB / JSON files.
+
+**Paste into a new Claude Code session in `polylocale`:**
+
+```
+Session 12 — CSV / XLSX export and import.
+
+Read CLAUDE.md, PROJECT.md, ARCHITECTURE.md. Check `git log`. Start
+in plan mode.
+
+Goal: export the current project to a CSV (and optionally XLSX)
+the user hands to a human translator; re-import the modified file
+and merge translations back into the project, surfacing every
+conflict instead of silently overwriting. CSV / XLSX are NOT
+"formats" in the parser/exporter sense — they're a transport over
+the existing model.
+
+Decide upfront (in plan mode):
+- Library: CSV first via a tiny hand-rolled writer/parser (no
+  dep). XLSX via a library — `xlsx` (sheetjs) is mature and OSS
+  but huge; `exceljs` is leaner. Start with CSV only;
+  XLSX-the-library question lives in a follow-up unless you can
+  justify the bundle cost in the plan.
+- Sheet shape: rows = translation keys, columns = `key | description
+  | <locale 1> | <locale 2> | …`. The key column is the join
+  key on re-import. Use `value.raw ?? renderICU(value.ir)` for
+  cell text — same trade-off the editor already makes for search.
+- Conflict policy on import: never silently overwrite. Compute
+  per-cell: was-empty → now-set is a clean apply; was-set → still
+  same is a no-op; was-set → now-different is a CONFLICT requiring
+  the user's review (modal listing every conflict before the
+  reducer dispatches `setValuesBatch`).
+- Placeholder safety: re-import strings go through `parseICU` so
+  malformed ICU surfaces as a parse error (per-row, not whole
+  batch).
+
+Scope:
+
+1. `packages/core/src/transport/csv.ts` (new) +
+   `csv.test.ts`:
+   - `exportProjectToCsv(project): string`. Stable column order:
+     `key`, `description`, then locales in `project.locales`
+     order. Quote-escape per RFC 4180.
+   - `parseCsvRows(text): readonly { key: string; description?:
+     string; values: Record<LocaleCode, string> }[]`. Strict on
+     the header row; surfaces the column → locale mapping based
+     on header names that match an existing locale code.
+   - Property-based round-trip: arbitrary projects export then
+     parse back to the same row set (raw text, not IR).
+
+2. `apps/app/src/services/translator-handoff.ts` (new):
+   - `exportProjectAsCsv(project): { filename, blob }`.
+   - `importCsvAndPlan(text, project): { applies: BatchValueEntry[];
+     conflicts: ConflictReport[]; parseErrors: ImportError[] }`.
+     `applies` is what would land cleanly; `conflicts` lists rows
+     where the spreadsheet value disagrees with current state;
+     `parseErrors` flag malformed ICU per row.
+
+3. `apps/app/src/views/HandoffModal.tsx` (new) + CSS:
+   - "Export CSV" button → triggers download.
+   - "Import CSV" file input → runs `importCsvAndPlan` → renders
+     three sections (clean applies, conflicts, parse errors) with
+     per-row checkboxes. Apply button funnels through the
+     existing `setValuesBatch` reducer (the same path used by
+     `BatchTranslateModal`).
+
+4. `apps/app/src/views/EditorView.tsx`:
+   - "📤 Translator handoff" button in the topbar (or fold it
+     into the Settings/Glossary kebab — your call).
+   - Opens HandoffModal.
+
+5. Tests:
+   - `csv.test.ts` — round-trip on the tiny ARB fixture; quotes;
+     newlines inside cells; missing columns; extra columns
+     (ignored with a warning).
+   - `translator-handoff.test.ts` — clean apply, conflict
+     reporting, parse error per row.
+   - `HandoffModal.test.tsx` — Testing Library smoke: import a
+     CSV, see clean applies and conflicts in the right
+     sections, apply selected → reducer fires.
+
+6. ARCHITECTURE.md:
+   - New §6 "Translator handoff" describing CSV as a transport
+     (not a format), the clean-apply / conflict / parse-error
+     triage, and why XLSX is deferred.
+
+DoD:
+- Export the fixture project as CSV, edit a few rows in
+  LibreOffice / Numbers, re-import → clean rows land via
+  setValuesBatch, conflicts surface in the modal.
+- A row with malformed ICU shows up as a parse error and is
+  NOT applied.
+- All previous tests green; pipeline green; push; CI green.
+```
+
+---
+
 ## Later sessions (templates)
 
 Sketches — refine in plan mode when their turn arrives.
 
-### Session 9 — Glossary UI
-
-Editor-side surface for the `glossary` field on `LocalizationProject`.
-Add / remove / edit terms; per-locale "translation" or "do not
-translate" flag; persistence in the project file. AI providers
-already accept the `glossary` argument from Session 8; this session
-just gives the user a way to populate it.
-
-### Session 10 — Diff view
-
-Side-by-side comparison: pick locale A vs. B, see only keys where
-values differ structurally (`icuEqual` returns false). Optional:
-read a second project snapshot from a sibling folder for "what
-changed since last export" — useful when reviewing inbound human
-translations.
-
-### Session 11 — CSV / XLSX export-import
-
-Human-translator handoff. Brief flags this as nice-to-have. Pivot
-points in the model are `TranslationValue.raw` per locale plus
-`description` and `placeholders`. Export stays format-agnostic;
-re-import merges by key path with conflict reporting.
-
-### Session 12 — Phase 2 onset: i18next variants, FormatJS
+### Session 13 — Phase 2 onset: i18next variants, FormatJS
 
 First non-Flutter formats. Reuses everything except parser/exporter
 pairs. Apply the format-addition checklist in CLAUDE.md verbatim;

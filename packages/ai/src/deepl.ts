@@ -23,15 +23,27 @@
  * `api-free.deepl.com`; everything else goes to `api.deepl.com`. Override by
  * passing `endpoint` explicitly.
  *
- * ## Glossary / context
+ * ## Glossary
  *
- * Both inputs are accepted on the request shape but ignored by this adapter
- * for now. DeepL has a separate `/v2/glossaries` flow that the next session
- * can wire in without touching the {@link AIProvider} surface.
+ * `request.glossary` is honoured via {@link createDeepLGlossaryService}:
+ * the service looks up or creates a DeepL glossary that matches the
+ * `(from, to)` pair, caches the resulting `glossary_id` by content hash,
+ * and the adapter passes it on the `/v2/translate` request. When the
+ * pair is not glossary-supported by DeepL the request goes through
+ * without a glossary — translation still works, just without the term
+ * overrides. See ARCHITECTURE.md §4.7.
+ *
+ * ## Context
+ *
+ * `request.context` is still ignored — DeepL exposes a per-request
+ * `context` field for sentence-level disambiguation, but it doesn't map
+ * cleanly to "key path + description" without distorting meaning. The
+ * LLM adapters use `context` instead.
  */
 
 import { collectTextNodes } from './icu-walk.js';
 import { bcp47ToDeepLSource, bcp47ToDeepLTarget } from './deepl-locales.js';
+import { createDeepLGlossaryService, type DeepLGlossaryService } from './deepl-glossary.js';
 import { ProviderHttpError, type AIProvider, type TranslateRequest } from './provider.js';
 
 const FREE_KEY_SUFFIX = ':fx';
@@ -44,6 +56,12 @@ export interface DeepLProviderOptions {
   readonly endpoint?: string;
   /** Inject for tests / non-browser environments; defaults to the global. */
   readonly fetch?: typeof fetch;
+  /**
+   * Inject for tests, or to share a glossary cache across multiple adapter
+   * instances. Defaults to a per-provider service derived from `apiKey`,
+   * `endpoint`, and `fetch`.
+   */
+  readonly glossaryService?: DeepLGlossaryService;
 }
 
 interface DeepLResponse {
@@ -66,6 +84,14 @@ export function createDeepLProvider(options: DeepLProviderOptions): AIProvider {
     );
   }
 
+  const glossaryService =
+    options.glossaryService ??
+    createDeepLGlossaryService({
+      apiKey: options.apiKey,
+      baseEndpoint: deriveBaseEndpoint(endpoint),
+      fetch: fetchImpl,
+    });
+
   return {
     id: 'deepl',
     async translate(request) {
@@ -74,7 +100,16 @@ export function createDeepLProvider(options: DeepLProviderOptions): AIProvider {
         return request.nodes;
       }
 
-      const body = buildBody(request, collected.texts);
+      const glossaryId =
+        request.glossary !== undefined && request.glossary.length > 0
+          ? await glossaryService.ensure({
+              from: request.from,
+              to: request.to,
+              entries: request.glossary,
+            })
+          : undefined;
+
+      const body = buildBody(request, collected.texts, glossaryId);
       const response = await fetchImpl(endpoint, {
         method: 'POST',
         headers: {
@@ -112,9 +147,14 @@ interface DeepLRequestBody {
   readonly source_lang: string;
   readonly target_lang: string;
   readonly preserve_formatting: boolean;
+  readonly glossary_id?: string;
 }
 
-function buildBody(request: TranslateRequest, texts: readonly string[]): DeepLRequestBody {
+function buildBody(
+  request: TranslateRequest,
+  texts: readonly string[],
+  glossaryId: string | undefined,
+): DeepLRequestBody {
   return {
     text: texts,
     source_lang: bcp47ToDeepLSource(request.from),
@@ -122,7 +162,21 @@ function buildBody(request: TranslateRequest, texts: readonly string[]): DeepLRe
     // Keeps capitalization and trailing whitespace, both of which matter
     // for fragments that sit immediately around placeholders.
     preserve_formatting: true,
+    ...(glossaryId !== undefined ? { glossary_id: glossaryId } : {}),
   };
+}
+
+/**
+ * The translate endpoint is `<base>/v2/translate`. Glossary endpoints
+ * live under the same `<base>/v2`. We strip the trailing `/translate`
+ * to derive the base — works for both the upstream URL and any
+ * `/api/deepl/v2/translate` proxy shape.
+ */
+function deriveBaseEndpoint(translateEndpoint: string): string {
+  if (translateEndpoint.endsWith('/translate')) {
+    return translateEndpoint.slice(0, -'/translate'.length);
+  }
+  return translateEndpoint;
 }
 
 async function safeText(response: Response): Promise<string> {

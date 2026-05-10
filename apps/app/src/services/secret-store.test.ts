@@ -132,6 +132,54 @@ describe('createSecretStore', () => {
     await b.unlock('p');
     expect(await b.get('deepl')).toBe('k');
   });
+
+  it('changePassphrase rotates every slot under the new passphrase', async () => {
+    const store = createSecretStore({ idb });
+    await store.unlock('old-pp');
+    await store.set('deepl', 'd-key:fx');
+    await store.set('openai', 'sk-openai-123');
+
+    await store.changePassphrase('old-pp', 'new-pp');
+    expect(store.isUnlocked()).toBe(true);
+
+    store.lock();
+    await expect(store.unlock('old-pp')).rejects.toBeInstanceOf(InvalidPassphraseError);
+    expect(store.isUnlocked()).toBe(false);
+
+    await store.unlock('new-pp');
+    expect(await store.get('deepl')).toBe('d-key:fx');
+    expect(await store.get('openai')).toBe('sk-openai-123');
+  });
+
+  it('changePassphrase rejects a wrong old passphrase without mutating storage', async () => {
+    const store = createSecretStore({ idb });
+    await store.unlock('correct');
+    await store.set('deepl', 'd-key:fx');
+
+    await expect(store.changePassphrase('wrong', 'whatever')).rejects.toBeInstanceOf(
+      InvalidPassphraseError,
+    );
+
+    store.lock();
+    await store.unlock('correct');
+    expect(await store.get('deepl')).toBe('d-key:fx');
+  });
+
+  it('changePassphrase rewrites the verifier so the old passphrase cannot derive it', async () => {
+    const store = createSecretStore({ idb });
+    await store.unlock('old-pp');
+    await store.set('deepl', 'd-key:fx');
+
+    await store.changePassphrase('old-pp', 'new-pp');
+
+    // A fresh store on the same IDB must reject the old passphrase entirely,
+    // and accept the new one. This proves the verifier ciphertext is no
+    // longer decryptable under the key derived from 'old-pp'.
+    const fresh = createSecretStore({ idb });
+    await expect(fresh.unlock('old-pp')).rejects.toBeInstanceOf(InvalidPassphraseError);
+    await fresh.unlock('new-pp');
+    expect(await fresh.get('deepl')).toBe('d-key:fx');
+  });
 });
 
 function openRaw(idb: IDBFactory): Promise<IDBDatabase> {
