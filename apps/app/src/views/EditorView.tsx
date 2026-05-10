@@ -10,6 +10,7 @@ import {
 
 import { renderICU, type LocaleCode, type TranslationKey } from '@polylocale/core';
 import { Table, type TableColumn } from '@polylocale/ui';
+import type { OnChangeFn, SortingState } from '@tanstack/react-table';
 
 import { createAIProviderHost } from '../services/ai-provider-host.js';
 import {
@@ -47,6 +48,7 @@ import { CellEditor } from './CellEditor.js';
 import { FillMissingButton } from './FillMissingButton.js';
 import { PassphrasePrompt } from './PassphrasePrompt.js';
 import { RowTranslateMenu } from './RowTranslateMenu.js';
+import { sortByStatus } from './sort/status-priority.js';
 import { useDebouncedValue } from './use-debounced-value.js';
 import styles from './EditorView.module.css';
 
@@ -111,6 +113,18 @@ export function EditorView(): ReactElement {
   const [batch, setBatch] = useState<BatchState | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebouncedValue(searchInput, 150);
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [statusSortDir, setStatusSortDir] = useState<'asc' | 'desc' | null>(null);
+
+  const onSortingChange = useCallback<OnChangeFn<SortingState>>((updater) => {
+    setStatusSortDir(null);
+    setSorting((prev) => (typeof updater === 'function' ? updater(prev) : updater));
+  }, []);
+
+  const cycleStatusSort = useCallback(() => {
+    setSorting([]);
+    setStatusSortDir((prev) => (prev === null ? 'asc' : prev === 'asc' ? 'desc' : null));
+  }, []);
 
   const runBatch = useCallback(
     async (jobs: readonly TranslationJob[], title: string): Promise<void> => {
@@ -445,6 +459,11 @@ export function EditorView(): ReactElement {
       id: locale,
       header: <LocaleHeader locale={locale} isBase={locale === baseLocale} />,
       minWidth: 240,
+      sortBy: (row: TranslationKey) => {
+        const value = row.values[locale];
+        if (value === undefined) return '';
+        return value.raw ?? renderICU(value.ir);
+      },
       cell: (row: TranslationKey) => {
         const issues = deriveCellIssues(row, locale, baseLocale);
         const pending = pendingTranslations.get(pendingKey(row.id, locale));
@@ -506,6 +525,7 @@ export function EditorView(): ReactElement {
         id: '__key',
         header: 'Key',
         width: 280,
+        sortBy: (row: TranslationKey) => row.path,
         cell: (row: TranslationKey) => (
           <KeyCell row={row} onTranslateMissing={() => onTranslateRowMissing(row)} />
         ),
@@ -513,6 +533,12 @@ export function EditorView(): ReactElement {
       ...localeColumns,
     ];
   }, [project, dirty, dispatch, pendingTranslations, aiHost, onTranslateRowMissing]);
+
+  const tableRows = useMemo<readonly TranslationKey[]>(() => {
+    if (project === null) return [];
+    if (statusSortDir === null) return project.keys;
+    return sortByStatus(project.keys, project.locales, project.baseLocale, statusSortDir);
+  }, [project, statusSortDir]);
 
   const supportsPicker = isDirectoryPickerSupported();
 
@@ -546,6 +572,17 @@ export function EditorView(): ReactElement {
               onChange={(e) => setSearchInput(e.currentTarget.value)}
               aria-label="Search keys or values"
             />
+          )}
+          {project !== null && (
+            <button
+              type="button"
+              className={`${styles.button} ${statusSortDir !== null ? styles.toggleActive : ''}`}
+              onClick={cycleStatusSort}
+              title="Sort rows by aggregate status (missing → placeholder mismatch → empty → ok)"
+              aria-pressed={statusSortDir !== null}
+            >
+              Status {statusSortDir === 'asc' ? '▲' : statusSortDir === 'desc' ? '▼' : '↕'}
+            </button>
           )}
           {project === null && reopen !== null && (
             <button type="button" className={styles.button} onClick={onReopen}>
@@ -604,11 +641,13 @@ export function EditorView(): ReactElement {
           <EmptyState onOpenFolder={onOpenFolder} supportsPicker={supportsPicker} />
         ) : (
           <Table<TranslationKey>
-            rows={project.keys}
+            rows={tableRows}
             columns={columns}
             rowKey={(row) => row.id}
             globalFilter={debouncedSearch}
             globalFilterFn={filterRow}
+            sorting={sorting}
+            onSortingChange={onSortingChange}
           />
         )}
       </main>
