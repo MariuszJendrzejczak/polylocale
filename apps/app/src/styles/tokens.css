@@ -1,0 +1,82 @@
+:root {
+  --color-bg: #ffffff;
+  --color-bg-app: #f5f5f7;
+  --color-bg-header: #f7f7f8;
+  --color-bg-hover: #fafafb;
+  --color-bg-input: #ffffff;
+  --color-bg-input-focus: #ffffff;
+  --color-bg-button: #ffffff;
+  --color-bg-button-primary: #1d4ed8;
+  --color-bg-button-primary-hover: #1e40af;
+  --color-bg-button-disabled: #e3e3e6;
+
+  --color-text: #1c1c20;
+  --color-text-muted: #6b6b73;
+  --color-text-button: #1c1c20;
+  --color-text-button-primary: #ffffff;
+  --color-text-button-disabled: #9b9ba2;
+
+  --color-border: #e3e3e6;
+  --color-border-strong: #c5c5cb;
+  --color-border-input-focus: #1d4ed8;
+  --color-border-error: #b3261e;
+
+  --color-status-ok-bg: #e3f5e9;
+  --color-status-ok-fg: #176c34;
+  --color-status-missing-bg: #ffe5e5;
+  --color-status-missing-fg: #b3261e;
+  --color-status-review-bg: #fff4d9;
+  --color-status-review-fg: #8a5a00;
+  --color-status-mismatch-bg: #ffe1cc;
+  --color-status-mismatch-fg: #9c3d00;
+  --color-status-empty-bg: #ececef;
+  --color-status-empty-fg: #6b6b73;
+  --color-status-modified-bg: #e1ebff;
+  --color-status-modified-fg: #1d4ed8;
+
+  --font-stack: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-stack-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+
+  --cell-padding-x: 12px;
+  --cell-padding-y: 8px;
+  --row-height: 36px;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 1px var(--color-border);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-bg-app);
+  color: var(--color-text);
+  font-family: var(--font-stack);
+  font-size: var(--font-size-md);
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}

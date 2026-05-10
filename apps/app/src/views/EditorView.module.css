@@ -1,0 +1,238 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: var(--color-bg-app);
+}
+
+.topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--font-size-md);
+}
+
+.brand {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.divider {
+  color: var(--color-text-muted);
+}
+
+.projectName {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.subtle {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.fsTag {
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-status-review-bg);
+  color: var(--color-status-review-fg);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--color-bg-button);
+  color: var(--color-text-button);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+}
+
+.button:disabled {
+  background: var(--color-bg-button-disabled);
+  color: var(--color-text-button-disabled);
+  border-color: var(--color-border);
+  cursor: not-allowed;
+}
+
+.primary {
+  background: var(--color-bg-button-primary);
+  color: var(--color-text-button-primary);
+  border-color: var(--color-bg-button-primary);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--color-bg-button-primary-hover);
+  border-color: var(--color-bg-button-primary-hover);
+}
+
+.primary:disabled {
+  background: var(--color-bg-button-disabled);
+  color: var(--color-text-button-disabled);
+  border-color: var(--color-border);
+}
+
+.count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.25);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.banner {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  font-size: var(--font-size-sm);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.bannerInfo {
+  background: var(--color-status-modified-bg);
+  color: var(--color-status-modified-fg);
+}
+
+.bannerError {
+  background: var(--color-status-missing-bg);
+  color: var(--color-status-missing-fg);
+}
+
+.bannerClose {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 4rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.emptyHeading {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.emptyBody {
+  margin: 0;
+  max-width: 440px;
+}
+
+.keyCell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 var(--cell-padding-x);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.keyPath {
+  font-family: var(--font-stack-mono);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.keyDesc {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.localeHeader {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.baseTag {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--color-status-modified-bg);
+  color: var(--color-status-modified-fg);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hiddenInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
