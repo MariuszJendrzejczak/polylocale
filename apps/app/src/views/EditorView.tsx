@@ -47,6 +47,7 @@ import { CellEditor } from './CellEditor.js';
 import { FillMissingButton } from './FillMissingButton.js';
 import { PassphrasePrompt } from './PassphrasePrompt.js';
 import { RowTranslateMenu } from './RowTranslateMenu.js';
+import { useDebouncedValue } from './use-debounced-value.js';
 import styles from './EditorView.module.css';
 
 const DEEPL_KEY_SLOT = 'deepl-api-key';
@@ -108,6 +109,8 @@ export function EditorView(): ReactElement {
   );
 
   const [batch, setBatch] = useState<BatchState | null>(null);
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebouncedValue(searchInput, 150);
 
   const runBatch = useCallback(
     async (jobs: readonly TranslationJob[], title: string): Promise<void> => {
@@ -423,6 +426,18 @@ export function EditorView(): ReactElement {
   const dirty = state.dirty;
   const pendingTranslations = state.pendingTranslations;
 
+  const filterRow = useCallback((row: TranslationKey, query: string): boolean => {
+    const needle = query.trim().toLowerCase();
+    if (needle === '') return true;
+    if (row.path.toLowerCase().includes(needle)) return true;
+    for (const value of Object.values(row.values)) {
+      if (value === undefined) continue;
+      const haystack = (value.raw ?? renderICU(value.ir)).toLowerCase();
+      if (haystack.includes(needle)) return true;
+    }
+    return false;
+  }, []);
+
   const columns = useMemo<readonly TableColumn<TranslationKey>[]>(() => {
     if (project === null) return [];
     const baseLocale = project.baseLocale;
@@ -522,6 +537,16 @@ export function EditorView(): ReactElement {
           )}
         </div>
         <div className={styles.actions}>
+          {project !== null && (
+            <input
+              type="search"
+              className={styles.searchInput}
+              placeholder="Search keys or values…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.currentTarget.value)}
+              aria-label="Search keys or values"
+            />
+          )}
           {project === null && reopen !== null && (
             <button type="button" className={styles.button} onClick={onReopen}>
               Reopen &ldquo;{reopen.handle.name}&rdquo;
@@ -578,7 +603,13 @@ export function EditorView(): ReactElement {
         {project === null ? (
           <EmptyState onOpenFolder={onOpenFolder} supportsPicker={supportsPicker} />
         ) : (
-          <Table<TranslationKey> rows={project.keys} columns={columns} rowKey={(row) => row.id} />
+          <Table<TranslationKey>
+            rows={project.keys}
+            columns={columns}
+            rowKey={(row) => row.id}
+            globalFilter={debouncedSearch}
+            globalFilterFn={filterRow}
+          />
         )}
       </main>
       <input
