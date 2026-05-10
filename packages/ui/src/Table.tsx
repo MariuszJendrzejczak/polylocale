@@ -59,13 +59,13 @@ export function Table<TRow>(props: TableProps<TRow>): ReactElement {
 
   const tanColumns = useMemo<ColumnDef<TRow>[]>(
     () =>
-      columns.map((c) => {
+      columns.map((c, idx) => {
         const def: ColumnDef<TRow> = {
           id: c.id,
-          accessorFn: (row) => row,
+          accessorFn: (row) => (c.sortBy !== undefined ? c.sortBy(row) : `__row-${idx}`),
           header: () => <>{c.header}</>,
           enableSorting: c.sortBy !== undefined,
-          enableGlobalFilter: filteringEnabled,
+          enableGlobalFilter: filteringEnabled && idx === 0,
         };
         if (c.sortBy !== undefined) {
           const sortBy = c.sortBy;
@@ -82,33 +82,27 @@ export function Table<TRow>(props: TableProps<TRow>): ReactElement {
     [columns, filteringEnabled],
   );
 
-  const filterFn = useMemo<FilterFn<TRow> | undefined>(() => {
-    if (!filteringEnabled) return undefined;
-    const userFn = globalFilterFn;
-    return (row: Row<TRow>, _columnId: string, value: unknown) => {
+  const filterFn = useMemo<FilterFn<TRow>>(() => {
+    return (row: Row<TRow>, _columnId: string, value: unknown): boolean => {
       const text = typeof value === 'string' ? value : '';
       if (text === '') return true;
-      return userFn(row.original, text);
+      if (globalFilterFn === undefined) return true;
+      return globalFilterFn(row.original, text);
     };
-  }, [filteringEnabled, globalFilterFn]);
+  }, [globalFilterFn]);
 
   const table = useReactTable<TRow>({
     data: rows as TRow[],
     columns: tanColumns,
     getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    globalFilterFn: filterFn,
     state: {
-      ...(sortingEnabled ? { sorting } : {}),
-      ...(filteringEnabled ? { globalFilter } : {}),
+      sorting: sortingEnabled ? sorting : [],
+      globalFilter: filteringEnabled ? globalFilter : '',
     },
-    ...(sortingEnabled
-      ? { getSortedRowModel: getSortedRowModel(), onSortingChange }
-      : {}),
-    ...(filteringEnabled
-      ? {
-          getFilteredRowModel: getFilteredRowModel(),
-          ...(filterFn !== undefined ? { globalFilterFn: filterFn } : {}),
-        }
-      : {}),
+    ...(sortingEnabled ? { onSortingChange } : {}),
   });
 
   const processedRows = table.getRowModel().rows;
