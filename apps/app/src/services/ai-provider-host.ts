@@ -1,74 +1,126 @@
 /**
  * Lazy AI-provider host for the editor.
  *
- * Wraps the secret store and one or more provider gates behind a single
- * `getProvider()` call. The first invocation may pop two modals — passphrase
- * (to unlock the secret store) and API key (to populate the slot when empty);
- * later calls return a cached `AIProvider` instance until either `reset()` is
- * called explicitly or the secret store is locked again.
+ * Each AI provider (DeepL, OpenAI, Anthropic) has its own slot in the
+ * encrypted secret store and its own cached factory. `getProvider(id)`
+ * runs two gates the first time a provider is needed — passphrase to
+ * unlock the store, then API key to populate the slot if empty — and
+ * caches an `AIProvider` instance per (id, apiKey) pair until either
+ * `reset()` is called or the secret store is locked again.
  *
- * v1 hard-codes DeepL. The `buildProvider` dependency is the only thing that
- * needs to change when Session 8 adds per-locale provider selection — call
- * sites stay on `host.getProvider()`.
- *
- * The default endpoint points at `/api/deepl/v2/translate` so the Vite dev
- * proxy and any production same-origin proxy carry the request without a
- * direct CORS-blocked browser → DeepL hop (see ARCHITECTURE.md §4.3).
+ * The default endpoint for DeepL points at the same-origin Vite dev
+ * proxy (`/api/deepl/v2/translate`); OpenAI and Anthropic have proper
+ * CORS so they hit their upstream endpoints directly.
  */
 
-import { createDeepLProvider, type AIProvider } from '@polylocale/ai';
+import {
+  createAnthropicProvider,
+  createDeepLProvider,
+  createOpenAIProvider,
+  type AIProvider,
+} from '@polylocale/ai';
 
 import type { SecretStore } from './secret-store.js';
 
-const DEEPL_KEY_SLOT = 'deepl-api-key';
+export type ProviderId = 'deepl' | 'openai' | 'anthropic';
+
 const DEFAULT_DEEPL_ENDPOINT = '/api/deepl/v2/translate';
 
+interface ProviderSlot {
+  readonly slot: string;
+  readonly label: string;
+  readonly build: (apiKey: string) => AIProvider;
+}
+
+const PROVIDER_SLOTS: Readonly<Record<ProviderId, ProviderSlot>> = {
+  deepl: {
+    slot: 'deepl-api-key',
+    label: 'DeepL',
+    build: (apiKey) => createDeepLProvider({ apiKey, endpoint: DEFAULT_DEEPL_ENDPOINT }),
+  },
+  openai: {
+    slot: 'openai-api-key',
+    label: 'OpenAI',
+    build: (apiKey) => createOpenAIProvider({ apiKey }),
+  },
+  anthropic: {
+    slot: 'anthropic-api-key',
+    label: 'Anthropic',
+    build: (apiKey) => createAnthropicProvider({ apiKey }),
+  },
+};
+
+export const PROVIDER_IDS: readonly ProviderId[] = ['deepl', 'openai', 'anthropic'];
+
+export function providerLabel(id: ProviderId): string {
+  return PROVIDER_SLOTS[id].label;
+}
+
+export function providerSlotName(id: ProviderId): string {
+  return PROVIDER_SLOTS[id].slot;
+}
+
 export interface AIProviderHost {
-  getProvider(): Promise<AIProvider | null>;
-  /** Drops the cached provider; the next `getProvider()` rebuilds it. */
-  reset(): void;
+  getProvider(id: ProviderId): Promise<AIProvider | null>;
+  /** Drops the cache for one provider; the next `getProvider(id)` rebuilds. */
+  reset(id?: ProviderId): void;
 }
 
 export interface AIProviderHostDeps {
   readonly secretStore: SecretStore;
   /** Resolves true on successful unlock, false when the user cancels. */
   readonly requestUnlock: () => Promise<boolean>;
-  /** Resolves true after the api-key slot is populated, false when cancelled. */
-  readonly requestApiKey: () => Promise<boolean>;
-  /** Override for tests; production wires `createDeepLProvider`. */
-  readonly buildProvider?: (apiKey: string) => AIProvider;
+  /**
+   * Resolves true after the api-key slot is populated, false when cancelled.
+   * Receives the slot name and a human-friendly provider label so the prompt
+   * can render "OpenAI API key" without hard-coding strings here.
+   */
+  readonly requestApiKey: (slot: string, providerLabel: string) => Promise<boolean>;
+  /** Override for tests; production wires the per-provider factories above. */
+  readonly buildProvider?: (id: ProviderId, apiKey: string) => AIProvider;
+}
+
+interface CachedProvider {
+  readonly apiKey: string;
+  readonly provider: AIProvider;
 }
 
 export function createAIProviderHost(deps: AIProviderHostDeps): AIProviderHost {
-  const buildProvider = deps.buildProvider ?? defaultBuildProvider;
-  let cached: { readonly apiKey: string; readonly provider: AIProvider } | undefined;
+  const buildProvider =
+    deps.buildProvider ?? ((id: ProviderId, apiKey: string) => PROVIDER_SLOTS[id].build(apiKey));
+  const cached = new Map<ProviderId, CachedProvider>();
 
   return {
-    async getProvider() {
+    async getProvider(id) {
+      const slot = PROVIDER_SLOTS[id];
       if (!deps.secretStore.isUnlocked()) {
         const ok = await deps.requestUnlock();
         if (!ok) return null;
       }
-      let apiKey = await deps.secretStore.get(DEEPL_KEY_SLOT);
+      let apiKey = await deps.secretStore.get(slot.slot);
       if (apiKey === undefined) {
-        const ok = await deps.requestApiKey();
+        const ok = await deps.requestApiKey(slot.slot, slot.label);
         if (!ok) return null;
-        apiKey = await deps.secretStore.get(DEEPL_KEY_SLOT);
+        apiKey = await deps.secretStore.get(slot.slot);
         if (apiKey === undefined) return null;
       }
-      if (cached !== undefined && cached.apiKey === apiKey) return cached.provider;
-      const provider = buildProvider(apiKey);
-      cached = { apiKey, provider };
+      const cachedFor = cached.get(id);
+      if (cachedFor !== undefined && cachedFor.apiKey === apiKey) return cachedFor.provider;
+      const provider = buildProvider(id, apiKey);
+      cached.set(id, { apiKey, provider });
       return provider;
     },
-    reset() {
-      cached = undefined;
+    reset(id) {
+      if (id === undefined) {
+        cached.clear();
+      } else {
+        cached.delete(id);
+      }
     },
   };
 }
 
-function defaultBuildProvider(apiKey: string): AIProvider {
-  return createDeepLProvider({ apiKey, endpoint: DEFAULT_DEEPL_ENDPOINT });
-}
-
-export const __test = { DEEPL_KEY_SLOT, DEFAULT_DEEPL_ENDPOINT };
+export const __test = {
+  PROVIDER_SLOTS,
+  DEFAULT_DEEPL_ENDPOINT,
+};

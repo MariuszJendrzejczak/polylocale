@@ -300,6 +300,32 @@ describe('editorReducer', () => {
     expect(next).toBe(state);
   });
 
+  it('setAiProviderPref sets a default and round-trips through the project model', () => {
+    let state = loaded(projectWithTwoKeys());
+    state = editorReducer(state, { type: 'setAiProviderPref', default: 'openai' });
+    expect(state.project!.settings.aiProviderPrefs?.default).toBe('openai');
+    // Provider preferences don't dirty individual keys.
+    expect(state.dirty.size).toBe(0);
+  });
+
+  it('setAiProviderPref records per-locale overrides without touching the default', () => {
+    let state = loaded(projectWithTwoKeys());
+    state = editorReducer(state, { type: 'setAiProviderPref', default: 'openai' });
+    state = editorReducer(state, {
+      type: 'setAiProviderPref',
+      perLocale: { locale: 'pl', provider: 'anthropic' },
+    });
+    expect(state.project!.settings.aiProviderPrefs?.default).toBe('openai');
+    expect(state.project!.settings.aiProviderPrefs?.perLocale?.['pl']).toBe('anthropic');
+  });
+
+  it('setAiProviderPref is a no-op when nothing changes', () => {
+    let state = loaded(projectWithTwoKeys());
+    state = editorReducer(state, { type: 'setAiProviderPref', default: 'openai' });
+    const same = editorReducer(state, { type: 'setAiProviderPref', default: 'openai' });
+    expect(same).toBe(state);
+  });
+
   it('loaded resets pendingTranslations', () => {
     let state = loaded(projectWithTwoKeys());
     state = editorReducer(state, {

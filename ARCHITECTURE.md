@@ -507,16 +507,16 @@ shape is therefore **never direct**:
 - **Node / CLI:** no proxy needed — pass DeepL's real URL as
   `endpoint` and the runtime's global `fetch` reaches it directly.
 
-### 4.4 LLM providers (deferred)
+### 4.4 LLM providers
 
 The interface is identical for LLM-backed providers — they too
-receive `ICUNode[]` and return `ICUNode[]`. The masking strategy may
-differ: a structured prompt that lists every text fragment with a
-stable index and asks the model to return the same JSON shape lets us
-keep the round-trip guarantee even when individual calls translate
-many keys at once. The `context.description` and `glossary` fields
-exist on the request shape today specifically to give those providers
-something to work with later — DeepL just ignores them.
+receive `ICUNode[]` and return `ICUNode[]`. The masking strategy is
+shared via `packages/ai/src/llm-translate.ts`; see §4.6 for the JSON
+fragment-prompt contract, the `LLMResponseError` shape, and the
+per-call cap that keeps individual prompts within token budgets.
+`context.description` and `glossary` are now actually used by the LLM
+adapters (the DeepL adapter wires `glossary` through its own
+`/v2/glossaries` flow — see §4.7).
 
 ### 4.5 AI in the editor
 
@@ -526,15 +526,29 @@ locales", per-locale "Fill missing for…") and one hard rule:
 **nothing lands in the model that the user has not explicitly
 approved**.
 
-#### Where the API key lives
+#### Where the API keys live
 
-The DeepL key sits in the encrypted secret store from §3.10 under the
-fixed slot `'deepl-api-key'`. The project file never carries it
-(`ProjectSettings` has no field for it on purpose) — a `.json` /
-`.arb` user opens or commits is always safe to share. Session 8 will
-add sibling slots (`'openai-api-key'`, `'anthropic-api-key'`) and a
-per-locale provider preference inside `ProjectSettings`; the slot
-name is the only thing call sites need to change.
+Each provider has its own slot in the encrypted secret store from
+§3.10:
+
+- DeepL → `'deepl-api-key'`
+- OpenAI → `'openai-api-key'`
+- Anthropic → `'anthropic-api-key'`
+
+The slot map and per-provider factories live in
+`apps/app/src/services/ai-provider-host.ts`; call sites pass a
+`ProviderId` (`'deepl' | 'openai' | 'anthropic'`) to
+`getProvider(id)` and the host walks the right slot, prompts for the
+right label, and caches per-id. The project file never carries any
+key (`ProjectSettings` has no field for keys on purpose) — a `.json`
+/ `.arb` the user opens or commits is always safe to share.
+
+Default and per-locale provider choice live in
+`ProjectSettings.aiProviderPrefs` (`{ default?, perLocale? }`). The
+editor reads `prefs.perLocale[locale] ?? prefs.default ?? 'deepl'`
+when picking the provider for a translation; the topbar dropdown
+writes `prefs.default`, and reducer action `setAiProviderPref` is the
+single mutation point.
 
 `apps/app/src/services/ai-provider-host.ts` is the lazy host:
 `getProvider()` first ensures the secret store is unlocked
@@ -611,6 +625,101 @@ this provider") and no checkbox. The per-cell popover renders the
 same message in a soft-error style (Close only) instead of dispatching
 a banner — the user can pick a different target locale and try
 again.
+
+### 4.6 LLM masking strategy
+
+LLM-backed providers (OpenAI, Anthropic) all share
+`packages/ai/src/llm-translate.ts`. The flow:
+
+1. The adapter calls `collectTextNodes(nodes)` — same primitive DeepL
+   uses, no special path.
+2. The shared helper builds two prompts:
+   - **System** (fixed instruction): "You will receive a JSON object
+     `{from, to, fragments}`. Translate every element of `fragments`
+     from `from` to `to`. Return a single JSON object
+     `{translations: string[]}` of identical length and order.
+     Preserve leading and trailing whitespace verbatim. Never add,
+     remove, merge, or split fragments. If a fragment is purely
+     whitespace or punctuation, return it unchanged. Do not output
+     any text outside the JSON object." Glossary entries (the ones
+     whose `perLocale[to]` is set) and `context.{keyPath, description}`
+     are appended as advisory hints.
+   - **User**: the literal JSON `{from, to, fragments}`.
+3. The adapter's provider-specific `chat` callable posts those to the
+   provider's API and returns the assistant's text response.
+4. The helper parses, validates `translations` is a string array of
+   the exact requested length, and on any mismatch throws
+   `LLMResponseError` (provider id + reason + truncated response
+   body). Strict JSON mode (OpenAI's `response_format: {type:
+'json_schema', strict: true}`; Anthropic's instruction-only
+   contract) is best-effort, not a guarantee — the helper validates
+   regardless.
+
+**Per-call cap.** `MAX_FRAGMENTS_PER_CALL = 100`. Above the cap, the
+helper splits the fragment list into chunks, runs them sequentially
+through the same `chat` callable, and stitches the results in input
+order. The cap is invisible to callers — one input IR still produces
+one output IR. The cap exists to keep prompts within reasonable
+token budgets even for pathological keys (a `select` with hundreds of
+text fragments across cases). Cross-key batching would change the
+`AIProvider` signature and is intentionally out of scope; the
+`runTranslations` orchestrator already runs 3 jobs in parallel,
+which gives most of the throughput win without the API churn.
+
+**Default models** (current as of 2026-05-10):
+
+- OpenAI: `gpt-4o-mini`. Stable, available across account tiers,
+  cheapest GPT-4-class model. Override via `model` if your account
+  has access to a cheaper variant (e.g. GPT-5 mini).
+- Anthropic: `claude-haiku-4-5-20251001`. Pinned (not the rolling
+  alias) so future refreshes are deliberate. Brief explicitly
+  recommends Haiku for speed/cost.
+
+When refreshing models, also refresh this date.
+
+**CORS.** Both providers return CORS headers (Anthropic gates on the
+`anthropic-dangerous-direct-browser-access: true` header, which the
+adapter sends unconditionally). No same-origin proxy needed in dev.
+DeepL is the only provider that requires the proxy from §4.3.
+
+### 4.7 DeepL glossary mapping
+
+`createDeepLGlossaryService` (`packages/ai/src/deepl-glossary.ts`)
+turns the model's `GlossaryEntry[]` into a DeepL glossary id usable
+on `/v2/translate`. The DeepL adapter calls it lazily — only when
+`request.glossary` is non-empty. Flow per `(from, to)`:
+
+1. **Filter** entries to those with a usable `perLocale[to]` mapping
+   (either a non-empty `translation` or `doNotTranslate: true`,
+   which becomes a same-source-as-target pair). No usable entries →
+   return `undefined`, the adapter posts `/v2/translate` without a
+   glossary.
+2. **Language-pair check.** `GET /v2/glossary-language-pairs` is
+   fetched once per service instance and cached. If the
+   `(EN, PL)`-style DeepL pair (region-stripped) isn't listed →
+   return `undefined`. Translation still happens, just without
+   glossary semantics — silent skip is the right call here because
+   "DeepL doesn't have glossaries for Maltese" isn't an error
+   condition the user can fix.
+3. **Cache key.** `sha256(apiKey + ' ' + dlSource + ' ' + dlTarget +
+' ' + tsv)`, where `tsv` is the deterministic TSV body
+   (entries sorted by source term, tabs/newlines stripped from
+   values). The first 16 hex chars become the glossary's
+   deterministic name (`polylocale:<short-hash>`).
+4. **Lookup.** `GET /v2/glossaries`; if a glossary with that exact
+   name and matching `(source_lang, target_lang)` exists → reuse
+   its `glossary_id`.
+5. **Create** otherwise: `POST /v2/glossaries` with `{name,
+source_lang, target_lang, entries: tsv, entries_format: 'tsv'}`,
+   cache the returned id.
+
+The cache is in-memory per service instance; subsequent translations
+for the same `(from, to, glossary content)` short-circuit at step 3.
+DeepL's glossary endpoint accepts only the bare ISO-639-1 code
+(`EN`, `PT`); the region (`EN-US`, `PT-BR`) is stripped for
+glossary use but kept verbatim for `/v2/translate`. The adapter
+passes `glossary_id` only when `ensure` returns one — otherwise the
+field is omitted.
 
 ---
 

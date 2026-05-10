@@ -11,6 +11,7 @@ import type {
   KeyStatus,
   LocaleCode,
   LocalizationProject,
+  ProjectSettings,
   TranslationKey,
   TranslationValue,
 } from '@polylocale/core';
@@ -105,6 +106,11 @@ export type EditorAction =
   | { readonly type: 'removeKey'; readonly keyId: string }
   | { readonly type: 'renameKey'; readonly keyId: string; readonly newPath: string }
   | { readonly type: 'setBaseLocale'; readonly locale: LocaleCode }
+  | {
+      readonly type: 'setAiProviderPref';
+      readonly default?: string;
+      readonly perLocale?: { readonly locale: LocaleCode; readonly provider: string };
+    }
   | { readonly type: 'markSaved'; readonly at: number }
   | { readonly type: 'banner'; readonly banner: EditorBanner | null }
   | { readonly type: 'reset' };
@@ -279,6 +285,29 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       if (!project.locales.includes(action.locale)) return state;
       return { ...state, project: { ...project, baseLocale: action.locale } };
     }
+    case 'setAiProviderPref': {
+      const project = state.project;
+      if (project === null) return state;
+      const current = project.settings.aiProviderPrefs;
+      const nextDefault = action.default ?? current?.default;
+      const nextPerLocale =
+        action.perLocale === undefined
+          ? current?.perLocale
+          : { ...(current?.perLocale ?? {}), [action.perLocale.locale]: action.perLocale.provider };
+      const aiProviderPrefs = pruneEmptyPrefs({
+        ...(nextDefault !== undefined ? { default: nextDefault } : {}),
+        ...(nextPerLocale !== undefined ? { perLocale: nextPerLocale } : {}),
+      });
+      const settings =
+        aiProviderPrefs === undefined
+          ? omitAiPrefs(project.settings)
+          : { ...project.settings, aiProviderPrefs };
+      // No data-touching change → no dirty marker. Provider preference is
+      // a project-file concern that lands on the next save like any other
+      // settings change, but it doesn't need to flag a specific key.
+      if (sameAiPrefs(settings.aiProviderPrefs, current)) return state;
+      return { ...state, project: { ...project, settings } };
+    }
     case 'markSaved': {
       return { ...state, dirty: new Set(), lastSavedAt: action.at, banner: null };
     }
@@ -359,6 +388,36 @@ function pruneByKeyId(
     }
   }
   return mutated ? next : current;
+}
+
+type AiProviderPrefs = NonNullable<ProjectSettings['aiProviderPrefs']>;
+
+function pruneEmptyPrefs(prefs: AiProviderPrefs): AiProviderPrefs | undefined {
+  const hasDefault = prefs.default !== undefined;
+  const hasPerLocale = prefs.perLocale !== undefined && Object.keys(prefs.perLocale).length > 0;
+  if (!hasDefault && !hasPerLocale) return undefined;
+  return prefs;
+}
+
+function omitAiPrefs(settings: ProjectSettings): ProjectSettings {
+  if (settings.aiProviderPrefs === undefined) return settings;
+  const { aiProviderPrefs: _omit, ...rest } = settings;
+  return rest;
+}
+
+function sameAiPrefs(a: AiProviderPrefs | undefined, b: AiProviderPrefs | undefined): boolean {
+  if (a === b) return true;
+  if (a === undefined || b === undefined) return false;
+  if (a.default !== b.default) return false;
+  const ak = a.perLocale === undefined ? [] : Object.keys(a.perLocale).sort();
+  const bk = b.perLocale === undefined ? [] : Object.keys(b.perLocale).sort();
+  if (ak.length !== bk.length) return false;
+  for (let i = 0; i < ak.length; i++) {
+    if (ak[i] !== bk[i]) return false;
+    const key = ak[i]!;
+    if ((a.perLocale ?? {})[key] !== (b.perLocale ?? {})[key]) return false;
+  }
+  return true;
 }
 
 function withoutPending(
