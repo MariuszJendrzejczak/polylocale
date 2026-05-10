@@ -518,6 +518,100 @@ many keys at once. The `context.description` and `glossary` fields
 exist on the request shape today specifically to give those providers
 something to work with later — DeepL just ignores them.
 
+### 4.5 AI in the editor
+
+`apps/app` plugs the §4 provider surface into the tabular editor with
+three entry points (per-cell ✦, per-row "⋯ Translate missing
+locales", per-locale "Fill missing for…") and one hard rule:
+**nothing lands in the model that the user has not explicitly
+approved**.
+
+#### Where the API key lives
+
+The DeepL key sits in the encrypted secret store from §3.10 under the
+fixed slot `'deepl-api-key'`. The project file never carries it
+(`ProjectSettings` has no field for it on purpose) — a `.json` /
+`.arb` user opens or commits is always safe to share. Session 8 will
+add sibling slots (`'openai-api-key'`, `'anthropic-api-key'`) and a
+per-locale provider preference inside `ProjectSettings`; the slot
+name is the only thing call sites need to change.
+
+`apps/app/src/services/ai-provider-host.ts` is the lazy host:
+`getProvider()` first ensures the secret store is unlocked
+(`requestUnlock` gate → passphrase modal), then ensures the slot has
+a value (`requestApiKey` gate → key modal), then caches a
+`createDeepLProvider` instance against that key. Cancelling either
+gate returns `null` cleanly so the calling action no-ops without a
+banner. The default endpoint is `/api/deepl/v2/translate` so the
+Vite dev proxy and any production same-origin proxy take over CORS
+(see §4.3) — adapter signature unchanged.
+
+#### End-to-end masking
+
+The editor never serializes ICU structure into a request body. It
+hands `value.ir` straight to `provider.translate()` and stores the
+returned `ICUNode[]` straight back. `collectTextNodes` (§4) does the
+masking inside the provider; the editor's only contribution is to
+respect the contract — _no `parseICU(translatedString)` round-trip
+on the way back_. Whatever IR the provider returns is what lands in
+the model, which keeps the placeholders/plurals/selects unbreakable
+by construction.
+
+When the base IR carries no translatable text at all (e.g.
+`{name}` only), the orchestrator (and the per-cell ✦ button) treat
+it as `'skipped-empty'` _before_ the network call. The UI does not
+show a fake "translation suggested" state in that case.
+
+#### Concurrency
+
+Batch flows go through `apps/app/src/services/translate-orchestrator.ts`,
+which limits concurrent in-flight calls to a default of **3** (rolled
+by hand, no extra dep). Outcomes are returned in input order even
+though jobs run concurrently, so the review modal renders rows in a
+stable shape. The orchestrator catches every failure into a
+structured `TranslationOutcome.status` (`'ready'`, `'skipped-empty'`,
+`'skipped-unsupported'`, `'error'`) and never throws — the caller
+gets one outcome per input job, always.
+
+Each batch carries an `AbortSignal`. Cancelling the running modal
+aborts the orchestrator: not-yet-started jobs short-circuit to
+`'error'` (with `aborted` as the message), in-flight jobs are
+allowed to finish, and the editor dispatches a `translationClear`
+for every job in the batch. The model never holds half-applied state
+because nothing was applied yet — `setValuesBatch` only fires from
+the review-modal Apply path.
+
+#### Review-before-apply fits "no silent data loss"
+
+Per-cell ✦ shows a small popover anchored to the cell with `before`
+(rendered base text) and `after` (rendered suggestion); the user
+clicks Accept to dispatch `setValue` (`source: 'ai'`,
+`aiProvider: 'deepl'`), or Discard / Esc / click-outside to drop the
+suggestion. Per-row and per-locale flows funnel into a single
+`BatchTranslateModal` whose checkbox per row defaults to _checked
+for ready outcomes only_; skipped/errored rows render with a reason
+and no checkbox. "Apply selected" lands every checked outcome
+through one `setValuesBatch` dispatch.
+
+Failures live in `pendingTranslations` (a `ReadonlyMap<string,
+'pending' | { error }>` keyed by `${keyId}:${locale}`) — visible UI
+state, never `project.keys`. A second click on a still-`'pending'`
+cell is a no-op; an error entry stays visible (red border, tooltip)
+until the user dismisses it. This satisfies PROJECT.md's "no silent
+data loss" quality bar end-to-end: the user sees what would land,
+chooses what lands, and the model reflects only what they accepted.
+
+#### `UnsupportedLocaleError`
+
+Thrown by the DeepL adapter when the BCP-47 locale resolves to no
+DeepL code (e.g. `mt-MT`). The orchestrator catches it into
+`'skipped-unsupported'`; the batch modal renders the row with the
+exact message ("deepl: target locale "mt-MT" is not supported by
+this provider") and no checkbox. The per-cell popover renders the
+same message in a soft-error style (Close only) instead of dispatching
+a banner — the user can pick a different target locale and try
+again.
+
 ---
 
 ## 5. Persistence flow (preview)

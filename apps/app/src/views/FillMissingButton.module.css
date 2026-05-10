@@ -1,0 +1,58 @@
+.root {
+  position: relative;
+  display: inline-flex;
+}
+
+.button {
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-bg-button);
+  color: var(--color-text-button);
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+}
+
+.button:disabled {
+  background: var(--color-bg-button-disabled);
+  color: var(--color-text-button-disabled);
+  cursor: not-allowed;
+  border-color: var(--color-bg-button-disabled);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 40;
+  min-width: 140px;
+  background: var(--color-bg);
+  border-radius: 4px;
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.16),
+    0 0 0 1px var(--color-border);
+  padding: 4px;
+}
+
+.menuItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 6px 10px;
+  border-radius: 3px;
+  font-size: var(--font-size-sm);
+  font-family: var(--font-stack-mono);
+  cursor: pointer;
+  color: var(--color-text);
+}
+
+.menuItem:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+}

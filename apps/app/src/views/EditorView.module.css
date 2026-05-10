@@ -183,10 +183,18 @@
 
 .keyCell {
   display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--cell-padding-x);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.keyText {
+  display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 2px;
-  padding: 0 var(--cell-padding-x);
   min-width: 0;
   flex: 1 1 auto;
 }
@@ -235,4 +243,58 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+.batchOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 20, 25, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+
+.batchProgress {
+  background: var(--color-bg);
+  border-radius: 8px;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.18),
+    0 0 0 1px var(--color-border);
+  width: 100%;
+  max-width: 360px;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.batchTitle {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+
+.batchCount {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.batchBar {
+  height: 6px;
+  background: var(--color-bg-app);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.batchBar > span {
+  display: block;
+  height: 100%;
+  background: var(--color-bg-button-primary);
+  transition: width 120ms ease-out;
+}
+
+.batchActions {
+  display: flex;
+  justify-content: flex-end;
 }

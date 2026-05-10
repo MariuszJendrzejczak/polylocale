@@ -1,4 +1,5 @@
 .cell {
+  position: relative;
   flex: 1 1 auto;
   display: flex;
   align-items: center;
@@ -6,6 +7,36 @@
   padding: 0 var(--cell-padding-x);
   min-width: 0;
   cursor: text;
+}
+
+.pending .text {
+  opacity: 0.5;
+}
+
+.cell.errored {
+  box-shadow: inset 0 0 0 2px var(--color-border-error);
+}
+
+.spinner {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-bg-button-primary);
+  animation: cellSpin 0.7s linear infinite;
+}
+
+@keyframes cellSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.aiSlot {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
 }
 
 .cell:focus-visible {
