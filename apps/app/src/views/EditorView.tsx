@@ -559,9 +559,22 @@ export function EditorView(): ReactElement {
             <>
               <span className={styles.divider}>/</span>
               <span className={styles.projectName}>{project.name}</span>
-              <span className={styles.subtle}>
-                · base {project.baseLocale} · {project.keys.length} keys
-              </span>
+              <span className={styles.subtle}>· base</span>
+              <select
+                className={styles.baseSelect}
+                value={project.baseLocale}
+                onChange={(e) =>
+                  dispatch({ type: 'setBaseLocale', locale: e.currentTarget.value })
+                }
+                aria-label="Base locale"
+              >
+                {project.locales.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+              <span className={styles.subtle}>· {project.keys.length} keys</span>
               {state.fsMode === 'fallback' && (
                 <span className={styles.fsTag} title="Browser does not support directory writeback">
                   fallback

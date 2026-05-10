@@ -282,6 +282,24 @@ describe('editorReducer', () => {
     expect(next).toBe(state);
   });
 
+  it('setBaseLocale switches the project base locale', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, { type: 'setBaseLocale', locale: 'pl' });
+    expect(next.project!.baseLocale).toBe('pl');
+  });
+
+  it('setBaseLocale is a no-op when locale equals the current base', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, { type: 'setBaseLocale', locale: 'en' });
+    expect(next).toBe(state);
+  });
+
+  it('setBaseLocale is a no-op when locale is not part of project.locales', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, { type: 'setBaseLocale', locale: 'de' });
+    expect(next).toBe(state);
+  });
+
   it('loaded resets pendingTranslations', () => {
     let state = loaded(projectWithTwoKeys());
     state = editorReducer(state, {

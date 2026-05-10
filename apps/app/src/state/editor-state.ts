@@ -104,6 +104,7 @@ export type EditorAction =
     }
   | { readonly type: 'removeKey'; readonly keyId: string }
   | { readonly type: 'renameKey'; readonly keyId: string; readonly newPath: string }
+  | { readonly type: 'setBaseLocale'; readonly locale: LocaleCode }
   | { readonly type: 'markSaved'; readonly at: number }
   | { readonly type: 'banner'; readonly banner: EditorBanner | null }
   | { readonly type: 'reset' };
@@ -270,6 +271,13 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         dirty,
         pendingTranslations,
       };
+    }
+    case 'setBaseLocale': {
+      const project = state.project;
+      if (project === null) return state;
+      if (action.locale === project.baseLocale) return state;
+      if (!project.locales.includes(action.locale)) return state;
+      return { ...state, project: { ...project, baseLocale: action.locale } };
     }
     case 'markSaved': {
       return { ...state, dirty: new Set(), lastSavedAt: action.at, banner: null };
