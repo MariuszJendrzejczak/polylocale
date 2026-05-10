@@ -102,6 +102,7 @@ export type EditorAction =
       readonly path: string;
       readonly baseValue: { readonly ir: readonly ICUNode[]; readonly raw: string };
     }
+  | { readonly type: 'removeKey'; readonly keyId: string }
   | { readonly type: 'markSaved'; readonly at: number }
   | { readonly type: 'banner'; readonly banner: EditorBanner | null }
   | { readonly type: 'reset' };
@@ -225,6 +226,22 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         dirty,
       };
     }
+    case 'removeKey': {
+      const project = state.project;
+      if (project === null) return state;
+      const target = project.keys.find((k) => k.id === action.keyId);
+      if (target === undefined) return state;
+      const keys = project.keys.filter((k) => k.id !== action.keyId);
+      const dirty = new Set(state.dirty);
+      dirty.add(action.keyId);
+      const pendingTranslations = pruneByKeyId(state.pendingTranslations, action.keyId);
+      return {
+        ...state,
+        project: { ...project, keys },
+        dirty,
+        pendingTranslations,
+      };
+    }
     case 'markSaved': {
       return { ...state, dirty: new Set(), lastSavedAt: action.at, banner: null };
     }
@@ -268,6 +285,23 @@ function updateKeyValue(
   });
   if (!changed) return project;
   return { ...project, keys };
+}
+
+function pruneByKeyId(
+  current: ReadonlyMap<string, PendingTranslation>,
+  keyId: string,
+): ReadonlyMap<string, PendingTranslation> {
+  if (current.size === 0) return current;
+  const prefix = `${keyId}:`;
+  let mutated = false;
+  const next = new Map(current);
+  for (const k of next.keys()) {
+    if (k.startsWith(prefix)) {
+      next.delete(k);
+      mutated = true;
+    }
+  }
+  return mutated ? next : current;
 }
 
 function withoutPending(

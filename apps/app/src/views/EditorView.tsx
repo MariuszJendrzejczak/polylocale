@@ -47,8 +47,8 @@ import { ApiKeyPrompt } from './ApiKeyPrompt.js';
 import { BatchTranslateModal, type AcceptedTranslation } from './BatchTranslateModal.js';
 import { CellEditor } from './CellEditor.js';
 import { FillMissingButton } from './FillMissingButton.js';
+import { KeyCell } from './KeyCell.js';
 import { PassphrasePrompt } from './PassphrasePrompt.js';
-import { RowTranslateMenu } from './RowTranslateMenu.js';
 import { sortByStatus } from './sort/status-priority.js';
 import { useDebouncedValue } from './use-debounced-value.js';
 import styles from './EditorView.module.css';
@@ -529,7 +529,11 @@ export function EditorView(): ReactElement {
         width: 280,
         sortBy: (row: TranslationKey) => row.path,
         cell: (row: TranslationKey) => (
-          <KeyCell row={row} onTranslateMissing={() => onTranslateRowMissing(row)} />
+          <KeyCell
+            row={row}
+            onTranslateMissing={() => onTranslateRowMissing(row)}
+            onDelete={(keyId) => dispatch({ type: 'removeKey', keyId })}
+          />
         ),
       },
       ...localeColumns,
@@ -740,30 +744,6 @@ function BatchProgressModal({
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function KeyCell({
-  row,
-  onTranslateMissing,
-}: {
-  readonly row: TranslationKey;
-  readonly onTranslateMissing: () => void;
-}): ReactElement {
-  return (
-    <div className={styles.keyCell}>
-      <div className={styles.keyText}>
-        <span className={styles.keyPath} title={row.path}>
-          {row.path}
-        </span>
-        {row.description !== undefined && (
-          <span className={styles.keyDesc} title={row.description}>
-            {row.description}
-          </span>
-        )}
-      </div>
-      <RowTranslateMenu onTranslateMissing={onTranslateMissing} />
     </div>
   );
 }

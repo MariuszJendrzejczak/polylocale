@@ -1,0 +1,87 @@
+.cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--cell-padding-x, 12px);
+  min-width: 0;
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.path {
+  font-family: var(--font-stack-mono);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.confirmText {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.confirmPath {
+  font-family: var(--font-stack-mono);
+  font-size: var(--font-size-sm);
+  background: var(--color-bg-hover);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.confirmActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.confirmButton {
+  height: 24px;
+  padding: 0 8px;
+  background: var(--color-bg-button);
+  color: var(--color-text-button);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.confirmButton:hover {
+  background: var(--color-bg-hover);
+}
+
+.confirmDanger {
+  background: var(--color-error, #c0392b);
+  color: #fff;
+  border-color: var(--color-error, #c0392b);
+}
+
+.confirmDanger:hover {
+  background: var(--color-error-strong, #a93226);
+  border-color: var(--color-error-strong, #a93226);
+}

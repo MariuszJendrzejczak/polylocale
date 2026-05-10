@@ -66,3 +66,11 @@
   color: var(--color-text-muted);
   cursor: not-allowed;
 }
+
+.menuItemDanger {
+  color: var(--color-error, #c0392b);
+}
+
+.menuItemDanger:hover:not(:disabled) {
+  background: rgba(192, 57, 43, 0.08);
+}

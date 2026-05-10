@@ -212,6 +212,25 @@ describe('editorReducer', () => {
     expect(next).toBe(state);
   });
 
+  it('removeKey drops the key, prunes pending entries, keeps Save enabled via dirty', () => {
+    let state = loaded(projectWithTwoKeys());
+    state = editorReducer(state, {
+      type: 'translationStart',
+      entries: [{ keyId: 'k1', locale: 'pl' }],
+    });
+    state = editorReducer(state, { type: 'removeKey', keyId: 'k1' });
+    expect(state.project!.keys.find((k) => k.id === 'k1')).toBeUndefined();
+    expect(state.project!.keys).toHaveLength(1);
+    expect(state.pendingTranslations.has(pendingKey('k1', 'pl'))).toBe(false);
+    expect(state.dirty.has('k1')).toBe(true);
+  });
+
+  it('removeKey is a no-op when keyId is unknown', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, { type: 'removeKey', keyId: 'no-such' });
+    expect(next).toBe(state);
+  });
+
   it('loaded resets pendingTranslations', () => {
     let state = loaded(projectWithTwoKeys());
     state = editorReducer(state, {

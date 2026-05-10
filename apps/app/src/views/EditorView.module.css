@@ -208,41 +208,6 @@
   max-width: 440px;
 }
 
-.keyCell {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 var(--cell-padding-x);
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.keyText {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.keyPath {
-  font-family: var(--font-stack-mono);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.keyDesc {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .localeHeader {
   display: inline-flex;
   align-items: center;
