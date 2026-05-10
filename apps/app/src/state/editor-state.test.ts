@@ -187,6 +187,31 @@ describe('editorReducer', () => {
     expect(state.pendingTranslations.has(pendingKey('k2', 'pl'))).toBe(true);
   });
 
+  it('addKey appends a new key with id=path, base-locale value, and marks dirty', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, {
+      type: 'addKey',
+      path: 'newKey',
+      baseValue: { ir: [{ kind: 'text', value: 'New' }], raw: 'New' },
+    });
+    const added = next.project!.keys.find((k) => k.path === 'newKey')!;
+    expect(added.id).toBe('newKey');
+    expect(added.values['en']?.raw).toBe('New');
+    expect(added.values['en']?.source).toBe('manual');
+    expect(added.status).toBe('missing-translation');
+    expect(next.dirty.has('newKey')).toBe(true);
+  });
+
+  it('addKey is a no-op when path already exists', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, {
+      type: 'addKey',
+      path: 'greet',
+      baseValue: { ir: [{ kind: 'text', value: 'x' }], raw: 'x' },
+    });
+    expect(next).toBe(state);
+  });
+
   it('loaded resets pendingTranslations', () => {
     let state = loaded(projectWithTwoKeys());
     state = editorReducer(state, {

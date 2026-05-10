@@ -11,6 +11,7 @@ import type {
   KeyStatus,
   LocaleCode,
   LocalizationProject,
+  TranslationKey,
   TranslationValue,
 } from '@polylocale/core';
 
@@ -96,6 +97,11 @@ export type EditorAction =
       readonly message: string;
     }
   | { readonly type: 'translationClear'; readonly entries: readonly PendingKey[] }
+  | {
+      readonly type: 'addKey';
+      readonly path: string;
+      readonly baseValue: { readonly ir: readonly ICUNode[]; readonly raw: string };
+    }
   | { readonly type: 'markSaved'; readonly at: number }
   | { readonly type: 'banner'; readonly banner: EditorBanner | null }
   | { readonly type: 'reset' };
@@ -191,6 +197,32 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       return {
         ...state,
         pendingTranslations: withoutPending(state.pendingTranslations, action.entries),
+      };
+    }
+    case 'addKey': {
+      const project = state.project;
+      if (project === null) return state;
+      if (project.keys.some((k) => k.path === action.path)) return state;
+      const newValue: TranslationValue = {
+        ir: action.baseValue.ir,
+        raw: action.baseValue.raw,
+        reviewed: true,
+        modifiedAt: Date.now(),
+        source: 'manual',
+      };
+      const values = { [project.baseLocale]: newValue };
+      const newKey: TranslationKey = {
+        id: action.path,
+        path: action.path,
+        values,
+        status: computeStatus(values, project.locales),
+      };
+      const dirty = new Set(state.dirty);
+      dirty.add(newKey.id);
+      return {
+        ...state,
+        project: { ...project, keys: [...project.keys, newKey] },
+        dirty,
       };
     }
     case 'markSaved': {

@@ -41,6 +41,7 @@ import { deriveCellIssues } from '../state/derive-issues.js';
 import { useEditor } from '../state/editor-context.js';
 import { pendingKey } from '../state/editor-state.js';
 
+import { AddKeyForm } from './AddKeyForm.js';
 import { AiCellAction } from './AiCellAction.js';
 import { ApiKeyPrompt } from './ApiKeyPrompt.js';
 import { BatchTranslateModal, type AcceptedTranslation } from './BatchTranslateModal.js';
@@ -115,6 +116,7 @@ export function EditorView(): ReactElement {
   const debouncedSearch = useDebouncedValue(searchInput, 150);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [statusSortDir, setStatusSortDir] = useState<'asc' | 'desc' | null>(null);
+  const [addFormOpen, setAddFormOpen] = useState(false);
 
   const onSortingChange = useCallback<OnChangeFn<SortingState>>((updater) => {
     setStatusSortDir(null);
@@ -584,6 +586,16 @@ export function EditorView(): ReactElement {
               Status {statusSortDir === 'asc' ? '▲' : statusSortDir === 'desc' ? '▼' : '↕'}
             </button>
           )}
+          {project !== null && (
+            <button
+              type="button"
+              className={styles.button}
+              onClick={() => setAddFormOpen((open) => !open)}
+              aria-pressed={addFormOpen}
+            >
+              + Add key
+            </button>
+          )}
           {project === null && reopen !== null && (
             <button type="button" className={styles.button} onClick={onReopen}>
               Reopen &ldquo;{reopen.handle.name}&rdquo;
@@ -620,6 +632,16 @@ export function EditorView(): ReactElement {
           </button>
         </div>
       </header>
+      {addFormOpen && project !== null && (
+        <AddKeyForm
+          project={project}
+          onSubmit={(path, ir, raw) => {
+            dispatch({ type: 'addKey', path, baseValue: { ir, raw } });
+            setAddFormOpen(false);
+          }}
+          onCancel={() => setAddFormOpen(false)}
+        />
+      )}
       {state.banner !== null && (
         <div
           className={`${styles.banner} ${state.banner.kind === 'error' ? styles.bannerError : styles.bannerInfo}`}
