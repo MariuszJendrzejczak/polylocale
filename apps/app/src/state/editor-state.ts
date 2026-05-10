@@ -23,6 +23,24 @@ export interface EditorBanner {
   readonly message: string;
 }
 
+export type ValueSource = 'manual' | 'ai' | 'imported';
+
+export type PendingTranslation = 'pending' | { readonly error: string };
+
+export interface BatchValueEntry {
+  readonly keyPath: string;
+  readonly locale: LocaleCode;
+  readonly ir: readonly ICUNode[];
+  readonly raw: string;
+  readonly source: ValueSource;
+  readonly aiProvider?: string;
+}
+
+export interface PendingKey {
+  readonly keyId: string;
+  readonly locale: LocaleCode;
+}
+
 export interface EditorState {
   readonly project: LocalizationProject | null;
   readonly fsMode: FsMode;
@@ -33,6 +51,8 @@ export interface EditorState {
   readonly skipped: readonly SkippedFile[];
   readonly lastSavedAt: number | null;
   readonly banner: EditorBanner | null;
+  /** keyId+':'+locale → 'pending' or {error} while AI translation is in flight or has failed. */
+  readonly pendingTranslations: ReadonlyMap<string, PendingTranslation>;
 }
 
 export const initialEditorState: EditorState = {
@@ -45,6 +65,7 @@ export const initialEditorState: EditorState = {
   skipped: [],
   lastSavedAt: null,
   banner: null,
+  pendingTranslations: new Map(),
 };
 
 export type EditorAction =
@@ -63,10 +84,20 @@ export type EditorAction =
       readonly locale: LocaleCode;
       readonly ir: readonly ICUNode[];
       readonly raw: string;
+      readonly source?: ValueSource;
+      readonly aiProvider?: string;
     }
+  | { readonly type: 'setValuesBatch'; readonly entries: readonly BatchValueEntry[] }
+  | { readonly type: 'translationStart'; readonly entries: readonly PendingKey[] }
+  | { readonly type: 'translationFail'; readonly keyId: string; readonly locale: LocaleCode; readonly message: string }
+  | { readonly type: 'translationClear'; readonly entries: readonly PendingKey[] }
   | { readonly type: 'markSaved'; readonly at: number }
   | { readonly type: 'banner'; readonly banner: EditorBanner | null }
   | { readonly type: 'reset' };
+
+export function pendingKey(keyId: string, locale: LocaleCode): string {
+  return `${keyId}:${locale}`;
+}
 
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
   switch (action.type) {
@@ -81,6 +112,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         skipped: action.skipped,
         dirty: new Set(),
         lastSavedAt: null,
+        pendingTranslations: new Map(),
         banner:
           action.skipped.length > 0
             ? {
@@ -93,12 +125,68 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     case 'setValue': {
       const project = state.project;
       if (project === null) return state;
-      const updated = updateKeyValue(project, action.keyPath, action.locale, action.ir, action.raw);
+      const source = action.source ?? 'manual';
+      const updated = updateKeyValue(project, {
+        keyPath: action.keyPath,
+        locale: action.locale,
+        ir: action.ir,
+        raw: action.raw,
+        source,
+        ...(action.aiProvider !== undefined ? { aiProvider: action.aiProvider } : {}),
+      });
       if (updated === project) return state;
       const dirty = new Set(state.dirty);
       const key = updated.keys.find((k) => k.path === action.keyPath);
       if (key !== undefined) dirty.add(key.id);
-      return { ...state, project: updated, dirty };
+      const pendingTranslations =
+        key !== undefined
+          ? withoutPending(state.pendingTranslations, [{ keyId: key.id, locale: action.locale }])
+          : state.pendingTranslations;
+      return { ...state, project: updated, dirty, pendingTranslations };
+    }
+    case 'setValuesBatch': {
+      const project = state.project;
+      if (project === null || action.entries.length === 0) return state;
+      let working = project;
+      const dirty = new Set(state.dirty);
+      const cleared: PendingKey[] = [];
+      for (const entry of action.entries) {
+        const next = updateKeyValue(working, entry);
+        if (next === working) continue;
+        working = next;
+        const key = working.keys.find((k) => k.path === entry.keyPath);
+        if (key !== undefined) {
+          dirty.add(key.id);
+          cleared.push({ keyId: key.id, locale: entry.locale });
+        }
+      }
+      if (working === project) return state;
+      return {
+        ...state,
+        project: working,
+        dirty,
+        pendingTranslations: withoutPending(state.pendingTranslations, cleared),
+      };
+    }
+    case 'translationStart': {
+      if (action.entries.length === 0) return state;
+      const next = new Map(state.pendingTranslations);
+      for (const entry of action.entries) {
+        next.set(pendingKey(entry.keyId, entry.locale), 'pending');
+      }
+      return { ...state, pendingTranslations: next };
+    }
+    case 'translationFail': {
+      const next = new Map(state.pendingTranslations);
+      next.set(pendingKey(action.keyId, action.locale), { error: action.message });
+      return { ...state, pendingTranslations: next };
+    }
+    case 'translationClear': {
+      if (action.entries.length === 0) return state;
+      return {
+        ...state,
+        pendingTranslations: withoutPending(state.pendingTranslations, action.entries),
+      };
     }
     case 'markSaved': {
       return { ...state, dirty: new Set(), lastSavedAt: action.at, banner: null };
@@ -112,30 +200,50 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
   }
 }
 
+interface UpdateKeyValueInput {
+  readonly keyPath: string;
+  readonly locale: LocaleCode;
+  readonly ir: readonly ICUNode[];
+  readonly raw: string;
+  readonly source: ValueSource;
+  readonly aiProvider?: string;
+}
+
 function updateKeyValue(
   project: LocalizationProject,
-  keyPath: string,
-  locale: LocaleCode,
-  ir: readonly ICUNode[],
-  raw: string,
+  input: UpdateKeyValueInput,
 ): LocalizationProject {
   let changed = false;
   const keys = project.keys.map((k) => {
-    if (k.path !== keyPath) return k;
+    if (k.path !== input.keyPath) return k;
     changed = true;
     const newValue: TranslationValue = {
-      ir,
-      raw,
+      ir: input.ir,
+      raw: input.raw,
       reviewed: true,
       modifiedAt: Date.now(),
-      source: 'manual',
+      source: input.source,
+      ...(input.aiProvider !== undefined ? { aiProvider: input.aiProvider } : {}),
     };
-    const values = { ...k.values, [locale]: newValue };
+    const values = { ...k.values, [input.locale]: newValue };
     const status = computeStatus(values, project.locales);
     return { ...k, values, status };
   });
   if (!changed) return project;
   return { ...project, keys };
+}
+
+function withoutPending(
+  current: ReadonlyMap<string, PendingTranslation>,
+  entries: readonly PendingKey[],
+): ReadonlyMap<string, PendingTranslation> {
+  if (entries.length === 0 || current.size === 0) return current;
+  let mutated = false;
+  const next = new Map(current);
+  for (const entry of entries) {
+    if (next.delete(pendingKey(entry.keyId, entry.locale))) mutated = true;
+  }
+  return mutated ? next : current;
 }
 
 function computeStatus(

@@ -11,6 +11,7 @@ import {
 import type { LocaleCode, TranslationKey } from '@polylocale/core';
 import { Table, type TableColumn } from '@polylocale/ui';
 
+import { createAIProviderHost } from '../services/ai-provider-host.js';
 import {
   composeFromLoaded,
   downloadFiles,
@@ -29,11 +30,18 @@ import {
   saveEditorMeta,
   type EditorMeta,
 } from '../services/persistence.js';
+import { createSecretStore } from '../services/secret-store.js';
 import { deriveCellIssues } from '../state/derive-issues.js';
 import { useEditor } from '../state/editor-context.js';
+import { pendingKey } from '../state/editor-state.js';
 
+import { AiCellAction } from './AiCellAction.js';
+import { ApiKeyPrompt } from './ApiKeyPrompt.js';
 import { CellEditor } from './CellEditor.js';
+import { PassphrasePrompt } from './PassphrasePrompt.js';
 import styles from './EditorView.module.css';
+
+const DEEPL_KEY_SLOT = 'deepl-api-key';
 
 interface ReopenPrompt {
   readonly handle: FileSystemDirectoryHandle;
@@ -45,6 +53,37 @@ export function EditorView(): ReactElement {
   const inputRef = useRef<HTMLInputElement>(null);
   const initRef = useRef(false);
   const [reopen, setReopen] = useState<ReopenPrompt | null>(null);
+  const [unlockGate, setUnlockGate] = useState<((success: boolean) => void) | null>(null);
+  const [apiKeyGate, setApiKeyGate] = useState<((success: boolean) => void) | null>(null);
+
+  const secretStore = useMemo(() => createSecretStore({ idb: globalThis.indexedDB }), []);
+
+  const requestUnlock = useCallback(
+    (): Promise<boolean> =>
+      new Promise<boolean>((resolve) => {
+        setUnlockGate(() => (success: boolean) => {
+          setUnlockGate(null);
+          resolve(success);
+        });
+      }),
+    [],
+  );
+
+  const requestApiKey = useCallback(
+    (): Promise<boolean> =>
+      new Promise<boolean>((resolve) => {
+        setApiKeyGate(() => (success: boolean) => {
+          setApiKeyGate(null);
+          resolve(success);
+        });
+      }),
+    [],
+  );
+
+  const aiHost = useMemo(
+    () => createAIProviderHost({ secretStore, requestUnlock, requestApiKey }),
+    [secretStore, requestUnlock, requestApiKey],
+  );
 
   const reopenFromHandle = useCallback(
     async (handle: FileSystemDirectoryHandle, meta: EditorMeta | undefined): Promise<void> => {
@@ -222,6 +261,7 @@ export function EditorView(): ReactElement {
 
   const project = state.project;
   const dirty = state.dirty;
+  const pendingTranslations = state.pendingTranslations;
 
   const columns = useMemo<readonly TableColumn<TranslationKey>[]>(() => {
     if (project === null) return [];
@@ -230,14 +270,59 @@ export function EditorView(): ReactElement {
       id: locale,
       header: <LocaleHeader locale={locale} isBase={locale === baseLocale} />,
       minWidth: 240,
-      cell: (row: TranslationKey) => (
-        <CellEditor
-          value={row.values[locale]}
-          issues={deriveCellIssues(row, locale, baseLocale)}
-          dirty={dirty.has(row.id)}
-          onCommit={(ir, raw) => dispatch({ type: 'setValue', keyPath: row.path, locale, ir, raw })}
-        />
-      ),
+      cell: (row: TranslationKey) => {
+        const issues = deriveCellIssues(row, locale, baseLocale);
+        const pending = pendingTranslations.get(pendingKey(row.id, locale));
+        const showAi = locale !== baseLocale && (issues.missing || issues.empty);
+        const aiAction = showAi ? (
+          <AiCellAction
+            host={aiHost}
+            keyId={row.id}
+            keyPath={row.path}
+            locale={locale}
+            baseLocale={baseLocale}
+            baseValue={row.values[baseLocale]}
+            {...(row.description !== undefined ? { description: row.description } : {})}
+            isPending={pending === 'pending'}
+            onStart={() =>
+              dispatch({
+                type: 'translationStart',
+                entries: [{ keyId: row.id, locale }],
+              })
+            }
+            onClear={() =>
+              dispatch({
+                type: 'translationClear',
+                entries: [{ keyId: row.id, locale }],
+              })
+            }
+            onFail={(message) =>
+              dispatch({ type: 'translationFail', keyId: row.id, locale, message })
+            }
+            onAccept={(ir, raw) =>
+              dispatch({
+                type: 'setValue',
+                keyPath: row.path,
+                locale,
+                ir,
+                raw,
+                source: 'ai',
+                aiProvider: 'deepl',
+              })
+            }
+          />
+        ) : undefined;
+        return (
+          <CellEditor
+            value={row.values[locale]}
+            issues={issues}
+            dirty={dirty.has(row.id)}
+            onCommit={(ir, raw) => dispatch({ type: 'setValue', keyPath: row.path, locale, ir, raw })}
+            {...(aiAction !== undefined ? { aiAction } : {})}
+            {...(pending !== undefined ? { pending } : {})}
+          />
+        );
+      },
     }));
     return [
       {
@@ -248,7 +333,7 @@ export function EditorView(): ReactElement {
       },
       ...localeColumns,
     ];
-  }, [project, dirty, dispatch]);
+  }, [project, dirty, dispatch, pendingTranslations, aiHost]);
 
   const supportsPicker = isDirectoryPickerSupported();
 
@@ -333,6 +418,17 @@ export function EditorView(): ReactElement {
         className={styles.hiddenInput}
         onChange={onInputChange}
       />
+      {unlockGate !== null && (
+        <PassphrasePrompt secretStore={secretStore} onResolved={unlockGate} />
+      )}
+      {apiKeyGate !== null && (
+        <ApiKeyPrompt
+          secretStore={secretStore}
+          slot={DEEPL_KEY_SLOT}
+          providerLabel="DeepL"
+          onResolved={apiKeyGate}
+        />
+      )}
     </div>
   );
 }
