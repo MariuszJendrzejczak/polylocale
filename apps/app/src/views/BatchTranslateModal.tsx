@@ -85,12 +85,7 @@ export function BatchTranslateModal(props: BatchTranslateModalProps): ReactEleme
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div
-        className={styles.card}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="batch-title"
-      >
+      <div className={styles.card} role="dialog" aria-modal="true" aria-labelledby="batch-title">
         <header className={styles.header}>
           <h2 id="batch-title" className={styles.title}>
             {title}
@@ -101,21 +96,19 @@ export function BatchTranslateModal(props: BatchTranslateModalProps): ReactEleme
         </header>
         <div className={styles.list}>
           {outcomes.length === 0 && (
-            <div className={styles.empty}>Nothing to translate — every cell already has a value.</div>
+            <div className={styles.empty}>
+              Nothing to translate — every cell already has a value.
+            </div>
           )}
           {outcomes.map((outcome) => {
             const k = rowKey(outcome);
             const ready = outcome.status.kind === 'ready';
             const checked = selected.has(k);
             const beforeText = baseTextFor(outcome.job.keyId);
-            const afterText =
-              outcome.status.kind === 'ready' ? renderICU(outcome.status.ir) : '';
+            const afterText = outcome.status.kind === 'ready' ? renderICU(outcome.status.ir) : '';
             const reason = describeStatus(outcome);
             return (
-              <div
-                key={k}
-                className={`${styles.row} ${ready ? '' : styles.rowSkipped}`}
-              >
+              <div key={k} className={`${styles.row} ${ready ? '' : styles.rowSkipped}`}>
                 <input
                   type="checkbox"
                   className={styles.check}

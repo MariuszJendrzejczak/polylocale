@@ -46,12 +46,15 @@ export function AiCellAction(props: AiCellActionProps): ReactElement | null {
   const abortRef = useRef<AbortController | null>(null);
   const closeRef = useRef<() => void>(() => {});
 
-  const close = useCallback((clear: boolean): void => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setPopover(null);
-    if (clear) onClear();
-  }, [onClear]);
+  const close = useCallback(
+    (clear: boolean): void => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      setPopover(null);
+      if (clear) onClear();
+    },
+    [onClear],
+  );
 
   closeRef.current = () => close(true);
 
@@ -100,7 +103,9 @@ export function AiCellAction(props: AiCellActionProps): ReactElement | null {
         nodes: baseValue!.ir,
         from: baseLocale,
         to: locale,
-        ...(description !== undefined ? { context: { keyPath, description } } : { context: { keyPath } }),
+        ...(description !== undefined
+          ? { context: { keyPath, description } }
+          : { context: { keyPath } }),
       });
       if (controller.signal.aborted) return;
       const raw = renderICU(translatedNodes);

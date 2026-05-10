@@ -61,8 +61,8 @@ export function ApiKeyPrompt(props: ApiKeyPromptProps): ReactElement {
         </h2>
         <p className={styles.body}>
           Paste your {providerLabel} API key. It is stored encrypted on this machine only — the
-          project file never carries it. Free-tier DeepL keys end with <code>:fx</code>; the
-          adapter routes them automatically to the free endpoint.
+          project file never carries it. Free-tier DeepL keys end with <code>:fx</code>; the adapter
+          routes them automatically to the free endpoint.
         </p>
         <label className={styles.label}>
           API key

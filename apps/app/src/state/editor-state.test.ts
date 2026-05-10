@@ -2,12 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ICUNode, LocalizationProject, TranslationValue } from '@polylocale/core';
 
-import {
-  editorReducer,
-  initialEditorState,
-  pendingKey,
-  type EditorState,
-} from './editor-state.js';
+import { editorReducer, initialEditorState, pendingKey, type EditorState } from './editor-state.js';
 
 const en = (text: string): TranslationValue => ({
   ir: [{ kind: 'text', value: text }] satisfies ICUNode[],
@@ -24,8 +19,18 @@ function projectWithTwoKeys(): LocalizationProject {
     locales: ['en', 'pl'],
     baseLocale: 'en',
     keys: [
-      { id: 'k1', path: 'greet', values: { en: en('Hello'), pl: undefined }, status: 'missing-translation' },
-      { id: 'k2', path: 'bye', values: { en: en('Bye'), pl: undefined }, status: 'missing-translation' },
+      {
+        id: 'k1',
+        path: 'greet',
+        values: { en: en('Hello'), pl: undefined },
+        status: 'missing-translation',
+      },
+      {
+        id: 'k2',
+        path: 'bye',
+        values: { en: en('Bye'), pl: undefined },
+        status: 'missing-translation',
+      },
     ],
     files: [],
     settings: {},

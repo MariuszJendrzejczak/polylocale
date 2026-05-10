@@ -89,7 +89,12 @@ export type EditorAction =
     }
   | { readonly type: 'setValuesBatch'; readonly entries: readonly BatchValueEntry[] }
   | { readonly type: 'translationStart'; readonly entries: readonly PendingKey[] }
-  | { readonly type: 'translationFail'; readonly keyId: string; readonly locale: LocaleCode; readonly message: string }
+  | {
+      readonly type: 'translationFail';
+      readonly keyId: string;
+      readonly locale: LocaleCode;
+      readonly message: string;
+    }
   | { readonly type: 'translationClear'; readonly entries: readonly PendingKey[] }
   | { readonly type: 'markSaved'; readonly at: number }
   | { readonly type: 'banner'; readonly banner: EditorBanner | null }

@@ -42,10 +42,7 @@ import { pendingKey } from '../state/editor-state.js';
 
 import { AiCellAction } from './AiCellAction.js';
 import { ApiKeyPrompt } from './ApiKeyPrompt.js';
-import {
-  BatchTranslateModal,
-  type AcceptedTranslation,
-} from './BatchTranslateModal.js';
+import { BatchTranslateModal, type AcceptedTranslation } from './BatchTranslateModal.js';
 import { CellEditor } from './CellEditor.js';
 import { FillMissingButton } from './FillMissingButton.js';
 import { PassphrasePrompt } from './PassphrasePrompt.js';
@@ -171,7 +168,12 @@ export function EditorView(): ReactElement {
   const onTranslateRowMissing = useCallback(
     (key: TranslationKey): void => {
       if (state.project === null) return;
-      const jobs = jobsForRow(key, state.project.baseLocale, state.project.locales, state.pendingTranslations);
+      const jobs = jobsForRow(
+        key,
+        state.project.baseLocale,
+        state.project.locales,
+        state.pendingTranslations,
+      );
       if (jobs.length === 0) return;
       void runBatch(jobs, `Translate missing for ${key.path}`);
     },
@@ -181,7 +183,12 @@ export function EditorView(): ReactElement {
   const onFillMissingForLocale = useCallback(
     (locale: LocaleCode): void => {
       if (state.project === null) return;
-      const jobs = jobsForLocale(state.project.keys, locale, state.project.baseLocale, state.pendingTranslations);
+      const jobs = jobsForLocale(
+        state.project.keys,
+        locale,
+        state.project.baseLocale,
+        state.pendingTranslations,
+      );
       if (jobs.length === 0) {
         dispatch({
           type: 'banner',
@@ -214,8 +221,7 @@ export function EditorView(): ReactElement {
         const acceptedKeys = new Set(accepted.map((a) => `${a.keyId}:${a.locale}`));
         const toClear = batch.outcomes
           .filter(
-            (o) =>
-              o.status.kind === 'ready' && !acceptedKeys.has(`${o.job.keyId}:${o.job.locale}`),
+            (o) => o.status.kind === 'ready' && !acceptedKeys.has(`${o.job.keyId}:${o.job.locale}`),
           )
           .map((o) => ({ keyId: o.job.keyId, locale: o.job.locale }));
         if (toClear.length > 0) dispatch({ type: 'translationClear', entries: toClear });
@@ -471,7 +477,9 @@ export function EditorView(): ReactElement {
             value={row.values[locale]}
             issues={issues}
             dirty={dirty.has(row.id)}
-            onCommit={(ir, raw) => dispatch({ type: 'setValue', keyPath: row.path, locale, ir, raw })}
+            onCommit={(ir, raw) =>
+              dispatch({ type: 'setValue', keyPath: row.path, locale, ir, raw })
+            }
             {...(aiAction !== undefined ? { aiAction } : {})}
             {...(pending !== undefined ? { pending } : {})}
           />
