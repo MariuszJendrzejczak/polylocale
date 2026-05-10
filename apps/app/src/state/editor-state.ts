@@ -11,6 +11,7 @@ import type {
   KeyStatus,
   LocaleCode,
   LocalizationProject,
+  TranslationKey,
   TranslationValue,
 } from '@polylocale/core';
 
@@ -96,6 +97,14 @@ export type EditorAction =
       readonly message: string;
     }
   | { readonly type: 'translationClear'; readonly entries: readonly PendingKey[] }
+  | {
+      readonly type: 'addKey';
+      readonly path: string;
+      readonly baseValue: { readonly ir: readonly ICUNode[]; readonly raw: string };
+    }
+  | { readonly type: 'removeKey'; readonly keyId: string }
+  | { readonly type: 'renameKey'; readonly keyId: string; readonly newPath: string }
+  | { readonly type: 'setBaseLocale'; readonly locale: LocaleCode }
   | { readonly type: 'markSaved'; readonly at: number }
   | { readonly type: 'banner'; readonly banner: EditorBanner | null }
   | { readonly type: 'reset' };
@@ -193,6 +202,83 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         pendingTranslations: withoutPending(state.pendingTranslations, action.entries),
       };
     }
+    case 'addKey': {
+      const project = state.project;
+      if (project === null) return state;
+      if (project.keys.some((k) => k.path === action.path)) return state;
+      const newValue: TranslationValue = {
+        ir: action.baseValue.ir,
+        raw: action.baseValue.raw,
+        reviewed: true,
+        modifiedAt: Date.now(),
+        source: 'manual',
+      };
+      const values = { [project.baseLocale]: newValue };
+      const newKey: TranslationKey = {
+        id: action.path,
+        path: action.path,
+        values,
+        status: computeStatus(values, project.locales),
+      };
+      const dirty = new Set(state.dirty);
+      dirty.add(newKey.id);
+      return {
+        ...state,
+        project: { ...project, keys: [...project.keys, newKey] },
+        dirty,
+      };
+    }
+    case 'removeKey': {
+      const project = state.project;
+      if (project === null) return state;
+      const target = project.keys.find((k) => k.id === action.keyId);
+      if (target === undefined) return state;
+      const keys = project.keys.filter((k) => k.id !== action.keyId);
+      const dirty = new Set(state.dirty);
+      dirty.add(action.keyId);
+      const pendingTranslations = pruneByKeyId(state.pendingTranslations, action.keyId);
+      return {
+        ...state,
+        project: { ...project, keys },
+        dirty,
+        pendingTranslations,
+      };
+    }
+    case 'renameKey': {
+      const project = state.project;
+      if (project === null) return state;
+      const target = project.keys.find((k) => k.id === action.keyId);
+      if (target === undefined) return state;
+      if (action.newPath === target.path) return state;
+      if (project.keys.some((k) => k.id !== action.keyId && k.path === action.newPath)) {
+        return state;
+      }
+      const newId = action.newPath;
+      const keys = project.keys.map((k) =>
+        k.id === action.keyId ? { ...k, id: newId, path: action.newPath } : k,
+      );
+      const dirty = new Set(state.dirty);
+      dirty.delete(action.keyId);
+      dirty.add(newId);
+      const pendingTranslations = renameKeyIdInPending(
+        state.pendingTranslations,
+        action.keyId,
+        newId,
+      );
+      return {
+        ...state,
+        project: { ...project, keys },
+        dirty,
+        pendingTranslations,
+      };
+    }
+    case 'setBaseLocale': {
+      const project = state.project;
+      if (project === null) return state;
+      if (action.locale === project.baseLocale) return state;
+      if (!project.locales.includes(action.locale)) return state;
+      return { ...state, project: { ...project, baseLocale: action.locale } };
+    }
     case 'markSaved': {
       return { ...state, dirty: new Set(), lastSavedAt: action.at, banner: null };
     }
@@ -236,6 +322,43 @@ function updateKeyValue(
   });
   if (!changed) return project;
   return { ...project, keys };
+}
+
+function renameKeyIdInPending(
+  current: ReadonlyMap<string, PendingTranslation>,
+  oldId: string,
+  newId: string,
+): ReadonlyMap<string, PendingTranslation> {
+  if (current.size === 0 || oldId === newId) return current;
+  const oldPrefix = `${oldId}:`;
+  let mutated = false;
+  const next = new Map<string, PendingTranslation>();
+  for (const [k, v] of current) {
+    if (k.startsWith(oldPrefix)) {
+      next.set(`${newId}:${k.slice(oldPrefix.length)}`, v);
+      mutated = true;
+    } else {
+      next.set(k, v);
+    }
+  }
+  return mutated ? next : current;
+}
+
+function pruneByKeyId(
+  current: ReadonlyMap<string, PendingTranslation>,
+  keyId: string,
+): ReadonlyMap<string, PendingTranslation> {
+  if (current.size === 0) return current;
+  const prefix = `${keyId}:`;
+  let mutated = false;
+  const next = new Map(current);
+  for (const k of next.keys()) {
+    if (k.startsWith(prefix)) {
+      next.delete(k);
+      mutated = true;
+    }
+  }
+  return mutated ? next : current;
 }
 
 function withoutPending(

@@ -187,6 +187,119 @@ describe('editorReducer', () => {
     expect(state.pendingTranslations.has(pendingKey('k2', 'pl'))).toBe(true);
   });
 
+  it('addKey appends a new key with id=path, base-locale value, and marks dirty', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, {
+      type: 'addKey',
+      path: 'newKey',
+      baseValue: { ir: [{ kind: 'text', value: 'New' }], raw: 'New' },
+    });
+    const added = next.project!.keys.find((k) => k.path === 'newKey')!;
+    expect(added.id).toBe('newKey');
+    expect(added.values['en']?.raw).toBe('New');
+    expect(added.values['en']?.source).toBe('manual');
+    expect(added.status).toBe('missing-translation');
+    expect(next.dirty.has('newKey')).toBe(true);
+  });
+
+  it('addKey is a no-op when path already exists', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, {
+      type: 'addKey',
+      path: 'greet',
+      baseValue: { ir: [{ kind: 'text', value: 'x' }], raw: 'x' },
+    });
+    expect(next).toBe(state);
+  });
+
+  it('removeKey drops the key, prunes pending entries, keeps Save enabled via dirty', () => {
+    let state = loaded(projectWithTwoKeys());
+    state = editorReducer(state, {
+      type: 'translationStart',
+      entries: [{ keyId: 'k1', locale: 'pl' }],
+    });
+    state = editorReducer(state, { type: 'removeKey', keyId: 'k1' });
+    expect(state.project!.keys.find((k) => k.id === 'k1')).toBeUndefined();
+    expect(state.project!.keys).toHaveLength(1);
+    expect(state.pendingTranslations.has(pendingKey('k1', 'pl'))).toBe(false);
+    expect(state.dirty.has('k1')).toBe(true);
+  });
+
+  it('removeKey is a no-op when keyId is unknown', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, { type: 'removeKey', keyId: 'no-such' });
+    expect(next).toBe(state);
+  });
+
+  it('renameKey updates id+path, migrates dirty Set and pendingTranslations', () => {
+    let state = loaded(projectWithTwoKeys());
+    state = editorReducer(state, {
+      type: 'setValue',
+      keyPath: 'greet',
+      locale: 'pl',
+      ir: [{ kind: 'text', value: 'x' }],
+      raw: 'x',
+    });
+    expect(state.dirty.has('k1')).toBe(true);
+    state = editorReducer(state, {
+      type: 'translationStart',
+      entries: [{ keyId: 'k1', locale: 'pl' }],
+    });
+    expect(state.pendingTranslations.has(pendingKey('k1', 'pl'))).toBe(true);
+
+    state = editorReducer(state, {
+      type: 'renameKey',
+      keyId: 'k1',
+      newPath: 'hello',
+    });
+
+    const renamed = state.project!.keys.find((k) => k.path === 'hello')!;
+    expect(renamed.id).toBe('hello');
+    expect(state.project!.keys.find((k) => k.path === 'greet')).toBeUndefined();
+    expect(state.dirty.has('k1')).toBe(false);
+    expect(state.dirty.has('hello')).toBe(true);
+    expect(state.pendingTranslations.has(pendingKey('k1', 'pl'))).toBe(false);
+    expect(state.pendingTranslations.has(pendingKey('hello', 'pl'))).toBe(true);
+  });
+
+  it('renameKey is a no-op when newPath collides with another key', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, {
+      type: 'renameKey',
+      keyId: 'k1',
+      newPath: 'bye',
+    });
+    expect(next).toBe(state);
+  });
+
+  it('renameKey is a no-op when newPath equals the current path', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, {
+      type: 'renameKey',
+      keyId: 'k1',
+      newPath: 'greet',
+    });
+    expect(next).toBe(state);
+  });
+
+  it('setBaseLocale switches the project base locale', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, { type: 'setBaseLocale', locale: 'pl' });
+    expect(next.project!.baseLocale).toBe('pl');
+  });
+
+  it('setBaseLocale is a no-op when locale equals the current base', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, { type: 'setBaseLocale', locale: 'en' });
+    expect(next).toBe(state);
+  });
+
+  it('setBaseLocale is a no-op when locale is not part of project.locales', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, { type: 'setBaseLocale', locale: 'de' });
+    expect(next).toBe(state);
+  });
+
   it('loaded resets pendingTranslations', () => {
     let state = loaded(projectWithTwoKeys());
     state = editorReducer(state, {

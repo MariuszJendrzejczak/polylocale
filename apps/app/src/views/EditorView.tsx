@@ -10,6 +10,7 @@ import {
 
 import { renderICU, type LocaleCode, type TranslationKey } from '@polylocale/core';
 import { Table, type TableColumn } from '@polylocale/ui';
+import type { OnChangeFn, SortingState } from '@tanstack/react-table';
 
 import { createAIProviderHost } from '../services/ai-provider-host.js';
 import {
@@ -40,13 +41,16 @@ import { deriveCellIssues } from '../state/derive-issues.js';
 import { useEditor } from '../state/editor-context.js';
 import { pendingKey } from '../state/editor-state.js';
 
+import { AddKeyForm } from './AddKeyForm.js';
 import { AiCellAction } from './AiCellAction.js';
 import { ApiKeyPrompt } from './ApiKeyPrompt.js';
 import { BatchTranslateModal, type AcceptedTranslation } from './BatchTranslateModal.js';
 import { CellEditor } from './CellEditor.js';
 import { FillMissingButton } from './FillMissingButton.js';
+import { KeyCell } from './KeyCell.js';
 import { PassphrasePrompt } from './PassphrasePrompt.js';
-import { RowTranslateMenu } from './RowTranslateMenu.js';
+import { sortByStatus } from './sort/status-priority.js';
+import { useDebouncedValue } from './use-debounced-value.js';
 import styles from './EditorView.module.css';
 
 const DEEPL_KEY_SLOT = 'deepl-api-key';
@@ -108,6 +112,21 @@ export function EditorView(): ReactElement {
   );
 
   const [batch, setBatch] = useState<BatchState | null>(null);
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebouncedValue(searchInput, 150);
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [statusSortDir, setStatusSortDir] = useState<'asc' | 'desc' | null>(null);
+  const [addFormOpen, setAddFormOpen] = useState(false);
+
+  const onSortingChange = useCallback<OnChangeFn<SortingState>>((updater) => {
+    setStatusSortDir(null);
+    setSorting((prev) => (typeof updater === 'function' ? updater(prev) : updater));
+  }, []);
+
+  const cycleStatusSort = useCallback(() => {
+    setSorting([]);
+    setStatusSortDir((prev) => (prev === null ? 'asc' : prev === 'asc' ? 'desc' : null));
+  }, []);
 
   const runBatch = useCallback(
     async (jobs: readonly TranslationJob[], title: string): Promise<void> => {
@@ -423,6 +442,18 @@ export function EditorView(): ReactElement {
   const dirty = state.dirty;
   const pendingTranslations = state.pendingTranslations;
 
+  const filterRow = useCallback((row: TranslationKey, query: string): boolean => {
+    const needle = query.trim().toLowerCase();
+    if (needle === '') return true;
+    if (row.path.toLowerCase().includes(needle)) return true;
+    for (const value of Object.values(row.values)) {
+      if (value === undefined) continue;
+      const haystack = (value.raw ?? renderICU(value.ir)).toLowerCase();
+      if (haystack.includes(needle)) return true;
+    }
+    return false;
+  }, []);
+
   const columns = useMemo<readonly TableColumn<TranslationKey>[]>(() => {
     if (project === null) return [];
     const baseLocale = project.baseLocale;
@@ -430,6 +461,11 @@ export function EditorView(): ReactElement {
       id: locale,
       header: <LocaleHeader locale={locale} isBase={locale === baseLocale} />,
       minWidth: 240,
+      sortBy: (row: TranslationKey) => {
+        const value = row.values[locale];
+        if (value === undefined) return '';
+        return value.raw ?? renderICU(value.ir);
+      },
       cell: (row: TranslationKey) => {
         const issues = deriveCellIssues(row, locale, baseLocale);
         const pending = pendingTranslations.get(pendingKey(row.id, locale));
@@ -491,13 +527,26 @@ export function EditorView(): ReactElement {
         id: '__key',
         header: 'Key',
         width: 280,
+        sortBy: (row: TranslationKey) => row.path,
         cell: (row: TranslationKey) => (
-          <KeyCell row={row} onTranslateMissing={() => onTranslateRowMissing(row)} />
+          <KeyCell
+            row={row}
+            project={project}
+            onTranslateMissing={() => onTranslateRowMissing(row)}
+            onDelete={(keyId) => dispatch({ type: 'removeKey', keyId })}
+            onRename={(keyId, newPath) => dispatch({ type: 'renameKey', keyId, newPath })}
+          />
         ),
       },
       ...localeColumns,
     ];
   }, [project, dirty, dispatch, pendingTranslations, aiHost, onTranslateRowMissing]);
+
+  const tableRows = useMemo<readonly TranslationKey[]>(() => {
+    if (project === null) return [];
+    if (statusSortDir === null) return project.keys;
+    return sortByStatus(project.keys, project.locales, project.baseLocale, statusSortDir);
+  }, [project, statusSortDir]);
 
   const supportsPicker = isDirectoryPickerSupported();
 
@@ -510,9 +559,22 @@ export function EditorView(): ReactElement {
             <>
               <span className={styles.divider}>/</span>
               <span className={styles.projectName}>{project.name}</span>
-              <span className={styles.subtle}>
-                · base {project.baseLocale} · {project.keys.length} keys
-              </span>
+              <span className={styles.subtle}>· base</span>
+              <select
+                className={styles.baseSelect}
+                value={project.baseLocale}
+                onChange={(e) =>
+                  dispatch({ type: 'setBaseLocale', locale: e.currentTarget.value })
+                }
+                aria-label="Base locale"
+              >
+                {project.locales.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+              <span className={styles.subtle}>· {project.keys.length} keys</span>
               {state.fsMode === 'fallback' && (
                 <span className={styles.fsTag} title="Browser does not support directory writeback">
                   fallback
@@ -522,6 +584,37 @@ export function EditorView(): ReactElement {
           )}
         </div>
         <div className={styles.actions}>
+          {project !== null && (
+            <input
+              type="search"
+              className={styles.searchInput}
+              placeholder="Search keys or values…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.currentTarget.value)}
+              aria-label="Search keys or values"
+            />
+          )}
+          {project !== null && (
+            <button
+              type="button"
+              className={`${styles.button} ${statusSortDir !== null ? styles.toggleActive : ''}`}
+              onClick={cycleStatusSort}
+              title="Sort rows by aggregate status (missing → placeholder mismatch → empty → ok)"
+              aria-pressed={statusSortDir !== null}
+            >
+              Status {statusSortDir === 'asc' ? '▲' : statusSortDir === 'desc' ? '▼' : '↕'}
+            </button>
+          )}
+          {project !== null && (
+            <button
+              type="button"
+              className={styles.button}
+              onClick={() => setAddFormOpen((open) => !open)}
+              aria-pressed={addFormOpen}
+            >
+              + Add key
+            </button>
+          )}
           {project === null && reopen !== null && (
             <button type="button" className={styles.button} onClick={onReopen}>
               Reopen &ldquo;{reopen.handle.name}&rdquo;
@@ -558,6 +651,16 @@ export function EditorView(): ReactElement {
           </button>
         </div>
       </header>
+      {addFormOpen && project !== null && (
+        <AddKeyForm
+          project={project}
+          onSubmit={(path, ir, raw) => {
+            dispatch({ type: 'addKey', path, baseValue: { ir, raw } });
+            setAddFormOpen(false);
+          }}
+          onCancel={() => setAddFormOpen(false)}
+        />
+      )}
       {state.banner !== null && (
         <div
           className={`${styles.banner} ${state.banner.kind === 'error' ? styles.bannerError : styles.bannerInfo}`}
@@ -578,7 +681,15 @@ export function EditorView(): ReactElement {
         {project === null ? (
           <EmptyState onOpenFolder={onOpenFolder} supportsPicker={supportsPicker} />
         ) : (
-          <Table<TranslationKey> rows={project.keys} columns={columns} rowKey={(row) => row.id} />
+          <Table<TranslationKey>
+            rows={tableRows}
+            columns={columns}
+            rowKey={(row) => row.id}
+            globalFilter={debouncedSearch}
+            globalFilterFn={filterRow}
+            sorting={sorting}
+            onSortingChange={onSortingChange}
+          />
         )}
       </main>
       <input
@@ -648,30 +759,6 @@ function BatchProgressModal({
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function KeyCell({
-  row,
-  onTranslateMissing,
-}: {
-  readonly row: TranslationKey;
-  readonly onTranslateMissing: () => void;
-}): ReactElement {
-  return (
-    <div className={styles.keyCell}>
-      <div className={styles.keyText}>
-        <span className={styles.keyPath} title={row.path}>
-          {row.path}
-        </span>
-        {row.description !== undefined && (
-          <span className={styles.keyDesc} title={row.description}>
-            {row.description}
-          </span>
-        )}
-      </div>
-      <RowTranslateMenu onTranslateMissing={onTranslateMissing} />
     </div>
   );
 }

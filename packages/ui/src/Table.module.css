@@ -33,6 +33,49 @@
   border-right: 0;
 }
 
+.headerSortable {
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--color-border, #e3e3e6);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  gap: 6px;
+}
+
+.headerSortable:last-child {
+  border-right: 0;
+}
+
+.headerSortable:hover {
+  background: var(--color-bg-hover, #f0f0f3);
+}
+
+.headerSortable:focus-visible {
+  outline: 2px solid var(--color-focus, #4c8bf5);
+  outline-offset: -2px;
+}
+
+.headerLabel {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headerSortIndicator {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-muted, #6b6b73);
+  opacity: 0.85;
+  width: 10px;
+  flex: 0 0 auto;
+}
+
 .body {
   position: relative;
   width: 100%;
@@ -57,7 +100,6 @@
   align-items: stretch;
   border-right: 1px solid var(--color-border, #e3e3e6);
   min-width: 0;
-  overflow: hidden;
 }
 
 .bodyCell:last-child {
