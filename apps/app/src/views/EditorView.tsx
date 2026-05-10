@@ -8,7 +8,7 @@ import {
   type ReactElement,
 } from 'react';
 
-import type { LocaleCode, TranslationKey } from '@polylocale/core';
+import { renderICU, type LocaleCode, type TranslationKey } from '@polylocale/core';
 import { Table, type TableColumn } from '@polylocale/ui';
 
 import { createAIProviderHost } from '../services/ai-provider-host.js';
@@ -22,6 +22,11 @@ import {
   saveToDirectory,
   type LoadedFile,
 } from '../services/file-system.js';
+import {
+  runTranslations,
+  type TranslationJob,
+  type TranslationOutcome,
+} from '../services/translate-orchestrator.js';
 import {
   clearDirectoryHandle,
   loadDirectoryHandle,
@@ -37,8 +42,14 @@ import { pendingKey } from '../state/editor-state.js';
 
 import { AiCellAction } from './AiCellAction.js';
 import { ApiKeyPrompt } from './ApiKeyPrompt.js';
+import {
+  BatchTranslateModal,
+  type AcceptedTranslation,
+} from './BatchTranslateModal.js';
 import { CellEditor } from './CellEditor.js';
+import { FillMissingButton } from './FillMissingButton.js';
 import { PassphrasePrompt } from './PassphrasePrompt.js';
+import { RowTranslateMenu } from './RowTranslateMenu.js';
 import styles from './EditorView.module.css';
 
 const DEEPL_KEY_SLOT = 'deepl-api-key';
@@ -47,6 +58,20 @@ interface ReopenPrompt {
   readonly handle: FileSystemDirectoryHandle;
   readonly meta: EditorMeta | undefined;
 }
+
+type BatchState =
+  | {
+      readonly phase: 'running';
+      readonly title: string;
+      readonly total: number;
+      readonly completed: number;
+      readonly controller: AbortController;
+    }
+  | {
+      readonly phase: 'review';
+      readonly title: string;
+      readonly outcomes: readonly TranslationOutcome[];
+    };
 
 export function EditorView(): ReactElement {
   const { state, dispatch } = useEditor();
@@ -84,6 +109,135 @@ export function EditorView(): ReactElement {
     () => createAIProviderHost({ secretStore, requestUnlock, requestApiKey }),
     [secretStore, requestUnlock, requestApiKey],
   );
+
+  const [batch, setBatch] = useState<BatchState | null>(null);
+
+  const runBatch = useCallback(
+    async (jobs: readonly TranslationJob[], title: string): Promise<void> => {
+      if (jobs.length === 0 || state.project === null) return;
+      const provider = await aiHost.getProvider();
+      if (provider === null) return;
+      dispatch({
+        type: 'translationStart',
+        entries: jobs.map((j) => ({ keyId: j.keyId, locale: j.locale })),
+      });
+      const controller = new AbortController();
+      setBatch({ phase: 'running', total: jobs.length, completed: 0, controller, title });
+      try {
+        const outcomes = await runTranslations(jobs, provider, {
+          signal: controller.signal,
+          onProgress: (_, completed, total) => {
+            setBatch((prev) =>
+              prev !== null && prev.phase === 'running' ? { ...prev, completed, total } : prev,
+            );
+          },
+        });
+        if (controller.signal.aborted) {
+          dispatch({
+            type: 'translationClear',
+            entries: jobs.map((j) => ({ keyId: j.keyId, locale: j.locale })),
+          });
+          setBatch(null);
+          return;
+        }
+        for (const o of outcomes) {
+          if (o.status.kind === 'error') {
+            dispatch({
+              type: 'translationFail',
+              keyId: o.job.keyId,
+              locale: o.job.locale,
+              message: o.status.message,
+            });
+          } else if (o.status.kind !== 'ready') {
+            dispatch({
+              type: 'translationClear',
+              entries: [{ keyId: o.job.keyId, locale: o.job.locale }],
+            });
+          }
+        }
+        setBatch({ phase: 'review', outcomes, title });
+      } catch (err) {
+        dispatch({
+          type: 'translationClear',
+          entries: jobs.map((j) => ({ keyId: j.keyId, locale: j.locale })),
+        });
+        dispatch({ type: 'banner', banner: { kind: 'error', message: errorMessage(err) } });
+        setBatch(null);
+      }
+    },
+    [aiHost, dispatch, state.project],
+  );
+
+  const onTranslateRowMissing = useCallback(
+    (key: TranslationKey): void => {
+      if (state.project === null) return;
+      const jobs = jobsForRow(key, state.project.baseLocale, state.project.locales, state.pendingTranslations);
+      if (jobs.length === 0) return;
+      void runBatch(jobs, `Translate missing for ${key.path}`);
+    },
+    [runBatch, state.pendingTranslations, state.project],
+  );
+
+  const onFillMissingForLocale = useCallback(
+    (locale: LocaleCode): void => {
+      if (state.project === null) return;
+      const jobs = jobsForLocale(state.project.keys, locale, state.project.baseLocale, state.pendingTranslations);
+      if (jobs.length === 0) {
+        dispatch({
+          type: 'banner',
+          banner: { kind: 'info', message: `No missing translations for ${locale}.` },
+        });
+        return;
+      }
+      void runBatch(jobs, `Fill missing for ${locale}`);
+    },
+    [runBatch, dispatch, state.pendingTranslations, state.project],
+  );
+
+  const onApplyBatch = useCallback(
+    (accepted: readonly AcceptedTranslation[]): void => {
+      if (accepted.length > 0) {
+        dispatch({
+          type: 'setValuesBatch',
+          entries: accepted.map((a) => ({
+            keyPath: a.keyPath,
+            locale: a.locale,
+            ir: a.ir,
+            raw: a.raw,
+            source: 'ai',
+            aiProvider: 'deepl',
+          })),
+        });
+      }
+      // Clear any pending entries for outcomes the user dismissed (unchecked).
+      if (batch?.phase === 'review') {
+        const acceptedKeys = new Set(accepted.map((a) => `${a.keyId}:${a.locale}`));
+        const toClear = batch.outcomes
+          .filter(
+            (o) =>
+              o.status.kind === 'ready' && !acceptedKeys.has(`${o.job.keyId}:${o.job.locale}`),
+          )
+          .map((o) => ({ keyId: o.job.keyId, locale: o.job.locale }));
+        if (toClear.length > 0) dispatch({ type: 'translationClear', entries: toClear });
+      }
+      setBatch(null);
+    },
+    [batch, dispatch],
+  );
+
+  const onCloseBatchReview = useCallback((): void => {
+    if (batch?.phase === 'review') {
+      const toClear = batch.outcomes
+        .filter((o) => o.status.kind === 'ready')
+        .map((o) => ({ keyId: o.job.keyId, locale: o.job.locale }));
+      if (toClear.length > 0) dispatch({ type: 'translationClear', entries: toClear });
+    }
+    setBatch(null);
+  }, [batch, dispatch]);
+
+  const onCancelBatchRunning = useCallback((): void => {
+    if (batch?.phase === 'running') batch.controller.abort();
+  }, [batch]);
 
   const reopenFromHandle = useCallback(
     async (handle: FileSystemDirectoryHandle, meta: EditorMeta | undefined): Promise<void> => {
@@ -329,11 +483,13 @@ export function EditorView(): ReactElement {
         id: '__key',
         header: 'Key',
         width: 280,
-        cell: (row: TranslationKey) => <KeyCell row={row} />,
+        cell: (row: TranslationKey) => (
+          <KeyCell row={row} onTranslateMissing={() => onTranslateRowMissing(row)} />
+        ),
       },
       ...localeColumns,
     ];
-  }, [project, dirty, dispatch, pendingTranslations, aiHost]);
+  }, [project, dirty, dispatch, pendingTranslations, aiHost, onTranslateRowMissing]);
 
   const supportsPicker = isDirectoryPickerSupported();
 
@@ -375,6 +531,13 @@ export function EditorView(): ReactElement {
             >
               Open files…
             </button>
+          )}
+          {project !== null && (
+            <FillMissingButton
+              locales={project.locales.filter((l) => l !== project.baseLocale)}
+              disabled={batch !== null}
+              onFill={onFillMissingForLocale}
+            />
           )}
           <button
             type="button"
@@ -429,21 +592,78 @@ export function EditorView(): ReactElement {
           onResolved={apiKeyGate}
         />
       )}
+      {batch?.phase === 'running' && (
+        <BatchProgressModal
+          title={batch.title}
+          completed={batch.completed}
+          total={batch.total}
+          onCancel={onCancelBatchRunning}
+        />
+      )}
+      {batch?.phase === 'review' && project !== null && (
+        <BatchTranslateModal
+          title={batch.title}
+          outcomes={batch.outcomes}
+          baseTextFor={(keyId) => baseTextFor(project.keys, project.baseLocale, keyId)}
+          onApply={onApplyBatch}
+          onClose={onCloseBatchReview}
+        />
+      )}
     </div>
   );
 }
 
-function KeyCell({ row }: { readonly row: TranslationKey }): ReactElement {
+function BatchProgressModal({
+  title,
+  completed,
+  total,
+  onCancel,
+}: {
+  readonly title: string;
+  readonly completed: number;
+  readonly total: number;
+  readonly onCancel: () => void;
+}): ReactElement {
+  return (
+    <div className={styles.batchOverlay} role="presentation">
+      <div className={styles.batchProgress} role="dialog" aria-modal="true" aria-label={title}>
+        <div className={styles.batchTitle}>{title}</div>
+        <div className={styles.batchCount}>
+          {completed} / {total} translations done
+        </div>
+        <div className={styles.batchBar}>
+          <span style={{ width: `${total === 0 ? 0 : (completed / total) * 100}%` }} />
+        </div>
+        <div className={styles.batchActions}>
+          <button type="button" className={styles.button} onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function KeyCell({
+  row,
+  onTranslateMissing,
+}: {
+  readonly row: TranslationKey;
+  readonly onTranslateMissing: () => void;
+}): ReactElement {
   return (
     <div className={styles.keyCell}>
-      <span className={styles.keyPath} title={row.path}>
-        {row.path}
-      </span>
-      {row.description !== undefined && (
-        <span className={styles.keyDesc} title={row.description}>
-          {row.description}
+      <div className={styles.keyText}>
+        <span className={styles.keyPath} title={row.path}>
+          {row.path}
         </span>
-      )}
+        {row.description !== undefined && (
+          <span className={styles.keyDesc} title={row.description}>
+            {row.description}
+          </span>
+        )}
+      </div>
+      <RowTranslateMenu onTranslateMissing={onTranslateMissing} />
     </div>
   );
 }
@@ -497,4 +717,72 @@ function handlesFromLoaded(
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function jobsForRow(
+  key: TranslationKey,
+  baseLocale: LocaleCode,
+  locales: readonly LocaleCode[],
+  pending: ReadonlyMap<string, unknown>,
+): readonly TranslationJob[] {
+  const baseValue = key.values[baseLocale];
+  if (baseValue === undefined) return [];
+  const out: TranslationJob[] = [];
+  for (const locale of locales) {
+    if (locale === baseLocale) continue;
+    if (!isMissingOrEmpty(key, locale)) continue;
+    if (pending.has(`${key.id}:${locale}`)) continue;
+    out.push({
+      keyId: key.id,
+      keyPath: key.path,
+      locale,
+      baseLocale,
+      baseIr: baseValue.ir,
+      ...(key.description !== undefined ? { description: key.description } : {}),
+    });
+  }
+  return out;
+}
+
+function jobsForLocale(
+  keys: readonly TranslationKey[],
+  locale: LocaleCode,
+  baseLocale: LocaleCode,
+  pending: ReadonlyMap<string, unknown>,
+): readonly TranslationJob[] {
+  const out: TranslationJob[] = [];
+  for (const key of keys) {
+    if (!isMissingOrEmpty(key, locale)) continue;
+    const baseValue = key.values[baseLocale];
+    if (baseValue === undefined) continue;
+    if (pending.has(`${key.id}:${locale}`)) continue;
+    out.push({
+      keyId: key.id,
+      keyPath: key.path,
+      locale,
+      baseLocale,
+      baseIr: baseValue.ir,
+      ...(key.description !== undefined ? { description: key.description } : {}),
+    });
+  }
+  return out;
+}
+
+function isMissingOrEmpty(key: TranslationKey, locale: LocaleCode): boolean {
+  const value = key.values[locale];
+  if (value === undefined) return true;
+  if (value.ir.length === 0) return true;
+  return value.ir.every((node) => node.kind === 'text' && node.value.trim() === '');
+}
+
+function baseTextFor(
+  keys: readonly TranslationKey[],
+  baseLocale: LocaleCode,
+  keyId: string,
+): string {
+  const key = keys.find((k) => k.id === keyId);
+  const value = key?.values[baseLocale];
+  if (value === undefined) return '';
+  if (value.raw !== undefined) return value.raw;
+  return renderICU(value.ir);
 }
