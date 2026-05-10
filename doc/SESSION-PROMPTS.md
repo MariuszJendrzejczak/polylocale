@@ -36,10 +36,24 @@ What's been built so far (verify with `git log --oneline`):
   permission re-prompt on reload, inline cell editor (re-parses ICU on
   commit), per-cell status badges, manual save-back to disk through the
   exporter.
+- ✅ **Session 6** — AI translate inside the editor: per-cell ✦, per-row
+  "translate missing", per-locale "fill missing", concurrency-limited
+  orchestrator, review-before-apply batch modal, passphrase + API-key
+  prompts driving the lazy `ai-provider-host`.
+- ✅ **Session 7** — editor UX: search-by-key-or-value, status sort and
+  per-column sort headers, add / remove / rename keys with path
+  validation, runtime base-locale switch.
+- ✅ **Session 8** — additional AI providers (OpenAI + Anthropic LLM
+  adapters with shared masking via `llm-translate.ts`) and DeepL
+  glossary integration (`/v2/glossaries` create/lookup, deterministic
+  cache key, language-pair check).
+- ✅ **Session 9** — Settings modal for AI keys + passphrase rotation:
+  inspect / add / replace / delete per-provider slots, change
+  passphrase in one atomic IDB transaction, `aiHost.reset()` on every
+  mutation so the next translation rebuilds against the new key.
 
-What's next: **session 6 (AI in the editor)**, **session 7 (editor UX:
-search + key add/remove/rename + sort)**, **session 8 (more AI
-providers + DeepL glossary)**.
+What's next: **session 10 (glossary UI)**, **session 11 (diff view)**,
+**session 12 (CSV / XLSX translator handoff)**.
 
 ---
 
