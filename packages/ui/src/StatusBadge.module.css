@@ -1,0 +1,43 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: 9px;
+  font-size: var(--font-size-xs, 11px);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--badge-bg, #ececef);
+  color: var(--badge-fg, #424248);
+  white-space: nowrap;
+}
+
+.ok {
+  --badge-bg: var(--color-status-ok-bg, #e3f5e9);
+  --badge-fg: var(--color-status-ok-fg, #176c34);
+}
+
+.missing {
+  --badge-bg: var(--color-status-missing-bg, #ffe5e5);
+  --badge-fg: var(--color-status-missing-fg, #b3261e);
+}
+
+.needsReview {
+  --badge-bg: var(--color-status-review-bg, #fff4d9);
+  --badge-fg: var(--color-status-review-fg, #8a5a00);
+}
+
+.placeholderMismatch {
+  --badge-bg: var(--color-status-mismatch-bg, #ffe1cc);
+  --badge-fg: var(--color-status-mismatch-fg, #9c3d00);
+}
+
+.empty {
+  --badge-bg: var(--color-status-empty-bg, #ececef);
+  --badge-fg: var(--color-status-empty-fg, #6b6b73);
+}
+
+.modified {
+  --badge-bg: var(--color-status-modified-bg, #e1ebff);
+  --badge-fg: var(--color-status-modified-fg, #1d4ed8);
+}
