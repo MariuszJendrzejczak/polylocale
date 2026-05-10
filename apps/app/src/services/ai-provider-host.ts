@@ -60,6 +60,21 @@ export function providerSlotName(id: ProviderId): string {
   return PROVIDER_SLOTS[id].slot;
 }
 
+export interface ProviderRegistryEntry {
+  readonly id: ProviderId;
+  readonly slot: string;
+  readonly label: string;
+}
+
+/** Lists every provider together with its slot name and display label. */
+export function getProviderRegistry(): readonly ProviderRegistryEntry[] {
+  return PROVIDER_IDS.map((id) => ({
+    id,
+    slot: PROVIDER_SLOTS[id].slot,
+    label: PROVIDER_SLOTS[id].label,
+  }));
+}
+
 export interface AIProviderHost {
   getProvider(id: ProviderId): Promise<AIProvider | null>;
   /** Drops the cache for one provider; the next `getProvider(id)` rebuilds. */

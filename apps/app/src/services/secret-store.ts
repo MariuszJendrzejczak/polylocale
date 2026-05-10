@@ -16,6 +16,11 @@
  *    creates a fresh salt and a sentinel verifier ciphertext so subsequent
  *    `unlock` calls can fail loudly when the passphrase is wrong.
  *  - `set` / `get` / `delete` / `list` — only valid while unlocked.
+ *  - `changePassphrase(old, new)` — verifies `old` against the verifier,
+ *    decrypts every slot in memory, then commits a fresh salt + verifier
+ *    + re-encrypted slots in a single IndexedDB transaction. Decryption
+ *    failures throw before any write opens; the rotation tx rolls back
+ *    atomically on commit errors.
  *  - `lock()` — drops the in-memory key. The IndexedDB blobs stay; the next
  *    `unlock` rebuilds the key from the stored salt.
  */
@@ -52,6 +57,13 @@ export interface SecretStore {
   get(name: string): Promise<string | undefined>;
   delete(name: string): Promise<void>;
   list(): Promise<readonly string[]>;
+  /**
+   * Re-encrypts every stored slot under a new passphrase. Verifies the old
+   * passphrase first; on any decryption failure during the rotation, throws
+   * without mutating IndexedDB. On success the store stays unlocked under
+   * the new passphrase.
+   */
+  changePassphrase(oldPassphrase: string, newPassphrase: string): Promise<void>;
   lock(): void;
 }
 
@@ -89,20 +101,10 @@ export function createSecretStore(options: SecretStoreOptions): SecretStore {
         const meta = (await idbGet(db, META_STORE, META_ID)) as MetaRecord | undefined;
         if (meta === undefined) {
           await initialiseMeta(db, cryptoImpl, passphrase);
-          cachedKey = await deriveKeyFromMeta(cryptoImpl, passphrase, await readMeta(db));
+          cachedKey = await deriveKey(cryptoImpl, passphrase, (await readMeta(db)).salt);
           return;
         }
-        const candidate = await deriveKey(cryptoImpl, passphrase, meta.salt);
-        try {
-          await cryptoImpl.subtle.decrypt(
-            { name: 'AES-GCM', iv: meta.verifierIv, additionalData: encodeUtf8(VERIFIER_AAD) },
-            candidate,
-            meta.verifierCiphertext,
-          );
-        } catch {
-          throw new InvalidPassphraseError();
-        }
-        cachedKey = candidate;
+        cachedKey = await verifyPassphrase(cryptoImpl, passphrase, meta);
       } finally {
         db.close();
       }
@@ -162,6 +164,64 @@ export function createSecretStore(options: SecretStoreOptions): SecretStore {
       try {
         const keys = await idbGetAllKeys(db, SECRETS_STORE);
         return keys.filter((k): k is string => typeof k === 'string').sort();
+      } finally {
+        db.close();
+      }
+    },
+
+    async changePassphrase(oldPassphrase, newPassphrase) {
+      const db = await openDb(idb);
+      try {
+        const meta = (await idbGet(db, META_STORE, META_ID)) as MetaRecord | undefined;
+        if (meta === undefined) throw new InvalidPassphraseError();
+        const oldKey = await verifyPassphrase(cryptoImpl, oldPassphrase, meta);
+
+        const slotNames = (await idbGetAllKeys(db, SECRETS_STORE)).filter(
+          (k): k is string => typeof k === 'string',
+        );
+        const plaintexts: { readonly name: string; readonly value: string }[] = [];
+        for (const name of slotNames) {
+          const record = (await idbGet(db, SECRETS_STORE, name)) as SecretRecord | undefined;
+          if (record === undefined) continue;
+          const plaintext = await cryptoImpl.subtle.decrypt(
+            { name: 'AES-GCM', iv: record.iv, additionalData: encodeUtf8(name) },
+            oldKey,
+            record.ciphertext,
+          );
+          plaintexts.push({ name, value: decodeUtf8(plaintext) });
+        }
+
+        const newSalt = randomBytes(cryptoImpl, SALT_BYTES);
+        const newKey = await deriveKey(cryptoImpl, newPassphrase, newSalt.buffer);
+        const newVerifierIv = randomBytes(cryptoImpl, IV_BYTES);
+        const newVerifierCiphertext = await cryptoImpl.subtle.encrypt(
+          { name: 'AES-GCM', iv: newVerifierIv, additionalData: encodeUtf8(VERIFIER_AAD) },
+          newKey,
+          encodeUtf8(VERIFIER_PLAINTEXT),
+        );
+        const newRecords: SecretRecord[] = [];
+        for (const { name, value } of plaintexts) {
+          const iv = randomBytes(cryptoImpl, IV_BYTES);
+          const ciphertext = await cryptoImpl.subtle.encrypt(
+            { name: 'AES-GCM', iv, additionalData: encodeUtf8(name) },
+            newKey,
+            encodeUtf8(value),
+          );
+          newRecords.push({ name, iv: iv.buffer, ciphertext });
+        }
+
+        await commitRotation(
+          db,
+          {
+            id: META_ID,
+            salt: newSalt.buffer,
+            verifierIv: newVerifierIv.buffer,
+            verifierCiphertext: newVerifierCiphertext,
+          } satisfies MetaRecord,
+          newRecords,
+        );
+
+        cachedKey = newKey;
       } finally {
         db.close();
       }
@@ -246,12 +306,39 @@ async function deriveKey(
   );
 }
 
-function deriveKeyFromMeta(
+async function verifyPassphrase(
   cryptoImpl: Crypto,
   passphrase: string,
   meta: MetaRecord,
 ): Promise<CryptoKey> {
-  return deriveKey(cryptoImpl, passphrase, meta.salt);
+  const candidate = await deriveKey(cryptoImpl, passphrase, meta.salt);
+  try {
+    await cryptoImpl.subtle.decrypt(
+      { name: 'AES-GCM', iv: meta.verifierIv, additionalData: encodeUtf8(VERIFIER_AAD) },
+      candidate,
+      meta.verifierCiphertext,
+    );
+  } catch {
+    throw new InvalidPassphraseError();
+  }
+  return candidate;
+}
+
+function commitRotation(
+  db: IDBDatabase,
+  meta: MetaRecord,
+  records: readonly SecretRecord[],
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([META_STORE, SECRETS_STORE], 'readwrite');
+    const secretsStore = tx.objectStore(SECRETS_STORE);
+    secretsStore.clear();
+    for (const record of records) secretsStore.put(record);
+    tx.objectStore(META_STORE).put(meta);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error('secret-store: rotation tx failed'));
+    tx.onabort = () => reject(tx.error ?? new Error('secret-store: rotation tx aborted'));
+  });
 }
 
 function idbGet(db: IDBDatabase, store: string, key: IDBValidKey): Promise<unknown> {

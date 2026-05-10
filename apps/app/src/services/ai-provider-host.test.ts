@@ -32,6 +32,9 @@ function createFakeSecretStore(): SecretStore {
     async list() {
       return [...data.keys()].sort();
     },
+    async changePassphrase() {
+      // No-op for the host tests — they never exercise rotation.
+    },
     lock() {
       unlocked = false;
     },

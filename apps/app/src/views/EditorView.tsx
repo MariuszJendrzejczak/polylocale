@@ -54,6 +54,7 @@ import { CellEditor } from './CellEditor.js';
 import { FillMissingButton } from './FillMissingButton.js';
 import { KeyCell } from './KeyCell.js';
 import { PassphrasePrompt } from './PassphrasePrompt.js';
+import { SettingsModal } from './SettingsModal.js';
 import { sortByStatus } from './sort/status-priority.js';
 import { useDebouncedValue } from './use-debounced-value.js';
 import styles from './EditorView.module.css';
@@ -141,6 +142,15 @@ export function EditorView(): ReactElement {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [statusSortDir, setStatusSortDir] = useState<'asc' | 'desc' | null>(null);
   const [addFormOpen, setAddFormOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const onOpenSettings = useCallback(async () => {
+    if (!secretStore.isUnlocked()) {
+      const ok = await requestUnlock();
+      if (!ok) return;
+    }
+    setSettingsOpen(true);
+  }, [secretStore, requestUnlock]);
 
   const onSortingChange = useCallback<OnChangeFn<SortingState>>((updater) => {
     setStatusSortDir(null);
@@ -669,6 +679,16 @@ export function EditorView(): ReactElement {
               + Add key
             </button>
           )}
+          {project !== null && (
+            <button
+              type="button"
+              className={styles.button}
+              onClick={() => void onOpenSettings()}
+              aria-label="Open settings"
+            >
+              ⚙ Settings
+            </button>
+          )}
           {project === null && reopen !== null && (
             <button type="button" className={styles.button} onClick={onReopen}>
               Reopen &ldquo;{reopen.handle.name}&rdquo;
@@ -763,6 +783,13 @@ export function EditorView(): ReactElement {
           slot={apiKeyGate.slot}
           providerLabel={apiKeyGate.providerLabel}
           onResolved={apiKeyGate.resolve}
+        />
+      )}
+      {settingsOpen && (
+        <SettingsModal
+          secretStore={secretStore}
+          onClose={() => setSettingsOpen(false)}
+          onSlotMutated={(id) => aiHost.reset(id)}
         />
       )}
       {batch?.phase === 'running' && (

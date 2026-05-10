@@ -419,6 +419,21 @@ Each decision below uses Decision / Context / Alternatives / Consequences.
   `set` / `get` / `delete` / `list` require an unlocked store.
   `lock()` drops the in-memory `CryptoKey`; the IDB blobs stay, the
   next `unlock` rebuilds the key from the stored salt.
+- **Passphrase rotation:** `changePassphrase(old, new)` runs in three
+  phases. (1) Verify `old` against the stored verifier (same path as
+  `unlock`; wrong passphrase → `InvalidPassphraseError`, IDB
+  untouched). (2) Read every slot record and decrypt its ciphertext
+  in memory under the old key; any decrypt failure (e.g. an
+  AAD-bound blob someone tampered with) throws before any write
+  opens, so the IDB state is preserved exactly. (3) Generate a fresh
+  salt, derive a new `CryptoKey` from `new`, encrypt a fresh
+  verifier and one fresh ciphertext per slot, then commit the new
+  meta record together with the full set of re-encrypted slot
+  records inside a **single** readwrite transaction spanning both
+  object stores. Browsers roll the transaction back atomically on
+  any commit error, so partial-rotation states are not observable.
+  On success the in-memory `CryptoKey` is swapped to the new one;
+  the store stays unlocked under `new`.
 - **Testability:** the factory takes `IDBFactory` and `Crypto` as
   options. Tests substitute `fake-indexeddb`; production uses
   `globalThis.indexedDB` and `globalThis.crypto`. Node 22 ships
@@ -542,6 +557,9 @@ The slot map and per-provider factories live in
 right label, and caches per-id. The project file never carries any
 key (`ProjectSettings` has no field for keys on purpose) — a `.json`
 / `.arb` the user opens or commits is always safe to share.
+Day-to-day inspection and rotation of those slots — and of the
+passphrase that protects them — lives in the Settings modal
+(`apps/app/src/views/SettingsModal.tsx`), reached from the topbar.
 
 Default and per-locale provider choice live in
 `ProjectSettings.aiProviderPrefs` (`{ default?, perLocale? }`). The
