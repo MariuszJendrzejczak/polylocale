@@ -30,9 +30,7 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
           contentRect: rect,
           borderBoxSize: [{ inlineSize: rect.width, blockSize: rect.height }],
           contentBoxSize: [{ inlineSize: rect.width, blockSize: rect.height }],
-          devicePixelContentBoxSize: [
-            { inlineSize: rect.width, blockSize: rect.height },
-          ],
+          devicePixelContentBoxSize: [{ inlineSize: rect.width, blockSize: rect.height }],
         } as unknown as ResizeObserverEntry;
         this.callback([entry], this as unknown as ResizeObserver);
       });

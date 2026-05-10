@@ -1,10 +1,6 @@
 import type { LocalizationProject } from '@polylocale/core';
 
-export type PathValidationReason =
-  | 'empty'
-  | 'duplicate'
-  | 'illegal-segment'
-  | 'prefix-collision';
+export type PathValidationReason = 'empty' | 'duplicate' | 'illegal-segment' | 'prefix-collision';
 
 export type PathValidationResult =
   | { readonly ok: true }

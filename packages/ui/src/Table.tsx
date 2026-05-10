@@ -157,11 +157,7 @@ export function Table<TRow>(props: TableProps<TRow>): ReactElement {
                 className={`${styles.headerCell} ${styles.headerSortable}`}
                 onClick={header.column.getToggleSortingHandler()}
                 aria-sort={
-                  sortDir === 'asc'
-                    ? 'ascending'
-                    : sortDir === 'desc'
-                      ? 'descending'
-                      : 'none'
+                  sortDir === 'asc' ? 'ascending' : sortDir === 'desc' ? 'descending' : 'none'
                 }
               >
                 <span className={styles.headerLabel}>
