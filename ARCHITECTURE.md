@@ -820,7 +820,87 @@ the user left off — without re-prompting for the directory in Chromium.
 
 ---
 
-## 6. What lives where (cheat sheet)
+## 6. Translator handoff (CSV)
+
+CSV is a **transport**, not a `SupportedFormat`. It never builds a
+`SourceFile`, never appears under `core/parsers|exporters`, and never
+becomes a round-trip-on-disk concern. It lives next to the model the same
+way `packages/ai` does — taking `LocalizationProject` in and sending
+`BatchValueEntry`s back through the existing `setValuesBatch` reducer
+action.
+
+### 6.1 Sheet shape
+
+```
+key, description, <locale 1>, <locale 2>, …
+```
+
+`key` is `TranslationKey.path`. `description` is `TranslationKey.description`
+or empty. Each locale column carries `value.raw ?? renderICU(value.ir)`
+— the same trade-off the editor uses for search. Missing values produce
+empty cells. Line endings are CRLF on export (RFC 4180); CRLF and LF are
+both accepted on import. No BOM (Excel-friendliness is a follow-up).
+
+The writer/parser lives in `packages/core/src/transport/csv.ts`:
+`exportProjectToCsv(project)` and `parseCsvRows(text)`. The parser is
+strict on the header (a `key` column is required; duplicate columns
+throw) and passes unknown header names through verbatim as `Record<string,
+string>` keys — the _service_ layer in `apps/app` decides which columns
+are project locales and which are extras.
+
+### 6.2 Import triage
+
+`apps/app/src/services/translator-handoff.ts:importCsvAndPlan` walks the
+parsed rows and produces an `ImportPlan` with three buckets:
+
+| current state        | cell text     | bucket                                 |
+| -------------------- | ------------- | -------------------------------------- |
+| empty / missing      | empty         | no-op                                  |
+| empty / missing      | text          | clean apply (parse error if malformed) |
+| set, IR matches text | text          | no-op                                  |
+| set, IR differs      | text          | **conflict**                           |
+| set                  | empty         | **conflict** (translator cleared cell) |
+| any                  | malformed ICU | parse error (per cell)                 |
+
+Equality uses `icuEqual(parseICU(cellText), currentValue.ir)` — not raw
+string compare — so a spreadsheet round-trip that shifts whitespace inside
+a plural body is not flagged as a conflict. Cells with malformed ICU
+become `parseErrors` and are never applied.
+
+Two whole-row failures land in `parseErrors` as well:
+
+- **Unknown key** — a CSV row whose `key` is not in the project. One
+  error per row, the row is skipped.
+- **Unknown column** — a header column that isn't `key`, `description`,
+  or a project locale. One error per column (dedup at the file level).
+
+`HandoffModal` renders the three buckets with checkboxes — clean applies
+default to checked, conflicts default to unchecked, parse errors are
+read-only — and the single Apply button funnels every accepted row
+through `setValuesBatch`. Nothing lands in the model that the user
+didn't tick.
+
+### 6.3 Why XLSX is deferred
+
+`xlsx` (sheetjs) and `exceljs` both add ~140–250 kB gz to the bundle for
+no behavioural win — CSV opens cleanly in LibreOffice, Numbers, Google
+Sheets, and Excel and round-trips through them as UTF-8 CSV. The
+contract above (column shape, cell text derivation, triage policy) is
+identical for XLSX; the day someone shows up with a real CSV-doesn't-work
+report we drop a serializer in alongside `csv.ts` and reuse the rest.
+
+### 6.4 Cleared-cell conflicts are non-applyable today
+
+The reducer has no `unsetValue` action — every action that touches a
+value writes one. When a translator clears a cell that previously had a
+translation, the import surfaces it as a conflict with
+`incomingIr === null`; the modal renders it inert with a hint. Adding a
+true unset path is a follow-up session, not a translator-handoff
+session.
+
+---
+
+## 7. What lives where (cheat sheet)
 
 | Concern                      | Lives in                                | Forbidden imports                     |
 | ---------------------------- | --------------------------------------- | ------------------------------------- |
@@ -837,7 +917,7 @@ it belongs in `core` or `ai`. If no, it belongs in `ui` or `apps/app`.
 
 ---
 
-## 7. Session-by-session roadmap
+## 8. Session-by-session roadmap
 
 - **Session 1 (this one):** foundation. Docs, license, scaffold, internal
   model, CI. **No production code.**

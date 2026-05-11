@@ -10,3 +10,5 @@ export { exportArb } from './exporters/arb.js';
 export { parseNestedJson } from './parsers/json-nested.js';
 export type { ParseNestedJsonInput } from './parsers/json-nested.js';
 export { exportNestedJson } from './exporters/json-nested.js';
+export { exportProjectToCsv, parseCsvRows, CsvParseError } from './transport/csv.js';
+export type { CsvRow } from './transport/csv.js';
