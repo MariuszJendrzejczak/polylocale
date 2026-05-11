@@ -59,6 +59,7 @@ import { CellEditor } from './CellEditor.js';
 import { DiffView } from './DiffView.js';
 import { FillMissingButton } from './FillMissingButton.js';
 import { GlossaryModal } from './GlossaryModal.js';
+import { HandoffModal } from './HandoffModal.js';
 import { KeyCell } from './KeyCell.js';
 import { PassphrasePrompt } from './PassphrasePrompt.js';
 import { SettingsModal } from './SettingsModal.js';
@@ -152,6 +153,7 @@ export function EditorView(): ReactElement {
   const [addFormOpen, setAddFormOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [glossaryOpen, setGlossaryOpen] = useState(false);
+  const [handoffOpen, setHandoffOpen] = useState(false);
 
   const onOpenSettings = useCallback(async () => {
     if (!secretStore.isUnlocked()) {
@@ -754,6 +756,16 @@ export function EditorView(): ReactElement {
             <button
               type="button"
               className={styles.button}
+              onClick={() => setHandoffOpen(true)}
+              aria-label="Translator handoff"
+            >
+              📤 Translator
+            </button>
+          )}
+          {project !== null && (
+            <button
+              type="button"
+              className={styles.button}
               onClick={() => void onOpenSettings()}
               aria-label="Open settings"
             >
@@ -874,6 +886,16 @@ export function EditorView(): ReactElement {
           }
           onRemove={(term) => dispatch({ type: 'removeGlossaryEntry', term })}
           onClose={() => setGlossaryOpen(false)}
+        />
+      )}
+      {handoffOpen && project !== null && (
+        <HandoffModal
+          project={project}
+          onApply={(entries) => {
+            if (entries.length > 0) dispatch({ type: 'setValuesBatch', entries });
+            setHandoffOpen(false);
+          }}
+          onClose={() => setHandoffOpen(false)}
         />
       )}
       {batch?.phase === 'running' && (
