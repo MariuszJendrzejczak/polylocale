@@ -136,6 +136,34 @@ back to `Text('#')`. The two-step is a fixed point, so the IR stays
 stable even though the surface representation flips between Pound and
 literal-text on each side of the boundary.
 
+### Structural equality vs byte equality of the IR
+
+Two equality predicates live next to each other in
+`packages/core/src/icu/` and answer different questions about the same
+`ICUNode[]` shape.
+
+- **`icuEqual(a, b)`** — byte-identical IR. Same node order, same text
+  values, same placeholder types and formats, same plural offsets, same
+  case-key sets and bodies. Used by the flat-JSON exporter's `raw`
+  shortcut (skip the renderer when the parsed IR is byte-identical to
+  the imported one) and by the round-trip property tests in
+  `icu/round-trip.test.ts` (`parseICU(renderICU(parseICU(s)))` ≡
+  `parseICU(s)`).
+- **`icuStructuralEqual(a, b)`** — same _skeleton_, text content
+  ignored. Placeholder _names_, plural/select arg names, plural offsets,
+  case-key sets, and tag names must match exactly; text values, and
+  placeholder `type`/`format` modifiers, are not compared. Used by the
+  diff view to surface keys whose underlying message changed between
+  two locales (placeholder renamed, plural case dropped, tag swapped) —
+  a positive result is the precondition for "AI translation of A is a
+  legal translation of B" because the non-text structure is what the
+  masking primitive in `packages/ai/src/icu-walk.ts` preserves across
+  the network call.
+
+If we later want a stricter "skeleton including placeholder type" check
+(say, for a "did the formatter change" inspector), it lands as a third
+predicate next to these two rather than tightening either one.
+
 ### ARB-specific decisions
 
 ARB (Application Resource Bundle, Flutter's native format) is the first

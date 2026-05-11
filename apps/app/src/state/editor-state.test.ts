@@ -431,4 +431,54 @@ describe('editorReducer', () => {
     });
     expect(reloaded.pendingTranslations.size).toBe(0);
   });
+
+  it('setView flips the active tab and is identity on a no-op dispatch', () => {
+    const state = loaded(projectWithTwoKeys());
+    expect(state.view).toBe('editor');
+    const diff = editorReducer(state, { type: 'setView', view: 'diff' });
+    expect(diff.view).toBe('diff');
+    // Re-dispatching with the same value short-circuits.
+    expect(editorReducer(diff, { type: 'setView', view: 'diff' })).toBe(diff);
+  });
+
+  it('setDiffSelection stores the selection and accepts null to clear', () => {
+    let state = loaded(projectWithTwoKeys());
+    expect(state.diffSelection).toBeNull();
+    state = editorReducer(state, {
+      type: 'setDiffSelection',
+      selection: { left: 'en', right: 'pl' },
+    });
+    expect(state.diffSelection).toEqual({ left: 'en', right: 'pl' });
+    // Identity on equal selection.
+    expect(
+      editorReducer(state, {
+        type: 'setDiffSelection',
+        selection: { left: 'en', right: 'pl' },
+      }),
+    ).toBe(state);
+    const cleared = editorReducer(state, { type: 'setDiffSelection', selection: null });
+    expect(cleared.diffSelection).toBeNull();
+  });
+
+  it('loaded resets view and diffSelection from any previous state', () => {
+    let state = loaded(projectWithTwoKeys());
+    state = editorReducer(state, { type: 'setView', view: 'diff' });
+    state = editorReducer(state, {
+      type: 'setDiffSelection',
+      selection: { left: 'en', right: 'pl' },
+    });
+    expect(state.view).toBe('diff');
+    expect(state.diffSelection).not.toBeNull();
+    const reloaded = editorReducer(state, {
+      type: 'loaded',
+      project: projectWithTwoKeys(),
+      fsMode: 'fallback',
+      directoryHandle: null,
+      directoryName: null,
+      fileHandles: new Map(),
+      skipped: [],
+    });
+    expect(reloaded.view).toBe('editor');
+    expect(reloaded.diffSelection).toBeNull();
+  });
 });

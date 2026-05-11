@@ -30,6 +30,13 @@ export type ValueSource = 'manual' | 'ai' | 'imported';
 
 export type PendingTranslation = 'pending' | { readonly error: string };
 
+export type EditorTab = 'editor' | 'diff';
+
+export interface DiffSelection {
+  readonly left: LocaleCode;
+  readonly right: LocaleCode;
+}
+
 export interface BatchValueEntry {
   readonly keyPath: string;
   readonly locale: LocaleCode;
@@ -56,6 +63,8 @@ export interface EditorState {
   readonly banner: EditorBanner | null;
   /** keyId+':'+locale → 'pending' or {error} while AI translation is in flight or has failed. */
   readonly pendingTranslations: ReadonlyMap<string, PendingTranslation>;
+  readonly view: EditorTab;
+  readonly diffSelection: DiffSelection | null;
 }
 
 export const initialEditorState: EditorState = {
@@ -69,6 +78,8 @@ export const initialEditorState: EditorState = {
   lastSavedAt: null,
   banner: null,
   pendingTranslations: new Map(),
+  view: 'editor',
+  diffSelection: null,
 };
 
 export type EditorAction =
@@ -119,6 +130,8 @@ export type EditorAction =
       readonly entry: GlossaryEntry;
     }
   | { readonly type: 'removeGlossaryEntry'; readonly term: string }
+  | { readonly type: 'setView'; readonly view: EditorTab }
+  | { readonly type: 'setDiffSelection'; readonly selection: DiffSelection | null }
   | { readonly type: 'markSaved'; readonly at: number }
   | { readonly type: 'banner'; readonly banner: EditorBanner | null }
   | { readonly type: 'reset' };
@@ -141,6 +154,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         dirty: new Set(),
         lastSavedAt: null,
         pendingTranslations: new Map(),
+        view: 'editor',
+        diffSelection: null,
         banner:
           action.skipped.length > 0
             ? {
@@ -348,6 +363,14 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       if (next.length === current.length) return state;
       return { ...state, project: withGlossary(project, next) };
     }
+    case 'setView': {
+      if (state.view === action.view) return state;
+      return { ...state, view: action.view };
+    }
+    case 'setDiffSelection': {
+      if (sameDiffSelection(state.diffSelection, action.selection)) return state;
+      return { ...state, diffSelection: action.selection };
+    }
     case 'markSaved': {
       return { ...state, dirty: new Set(), lastSavedAt: action.at, banner: null };
     }
@@ -458,6 +481,12 @@ function sameAiPrefs(a: AiProviderPrefs | undefined, b: AiProviderPrefs | undefi
     if ((a.perLocale ?? {})[key] !== (b.perLocale ?? {})[key]) return false;
   }
   return true;
+}
+
+function sameDiffSelection(a: DiffSelection | null, b: DiffSelection | null): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  return a.left === b.left && a.right === b.right;
 }
 
 function withoutPending(

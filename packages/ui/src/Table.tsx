@@ -182,6 +182,7 @@ export function Table<TRow>(props: TableProps<TRow>): ReactElement {
           return (
             <div
               key={vi.key}
+              data-row-key={vi.key}
               className={styles.bodyRow}
               style={{
                 gridTemplateColumns: gridTemplate,
