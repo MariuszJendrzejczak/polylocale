@@ -83,9 +83,7 @@ describe('runTranslations', () => {
   it('forwards a job glossary onto provider.translate when present', async () => {
     const translate = vi.fn<AIProvider['translate']>(async ({ nodes }) => nodes);
     const provider: AIProvider = { id: 'stub', translate };
-    const glossary = [
-      { term: 'polylocale', perLocale: { pl: { doNotTranslate: true as const } } },
-    ];
+    const glossary = [{ term: 'polylocale', perLocale: { pl: { doNotTranslate: true as const } } }];
     await runTranslations([job({ glossary })], provider);
     expect(translate).toHaveBeenCalledTimes(1);
     const call = translate.mock.calls[0]![0];

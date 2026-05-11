@@ -963,8 +963,7 @@ function jobsForRow(
 ): readonly TranslationJob[] {
   const baseValue = key.values[baseLocale];
   if (baseValue === undefined) return [];
-  const glossaryField =
-    glossary !== undefined && glossary.length > 0 ? { glossary } : {};
+  const glossaryField = glossary !== undefined && glossary.length > 0 ? { glossary } : {};
   const out: TranslationJob[] = [];
   for (const locale of locales) {
     if (locale === baseLocale) continue;
@@ -990,8 +989,7 @@ function jobsForLocale(
   pending: ReadonlyMap<string, unknown>,
   glossary: readonly GlossaryEntry[] | undefined,
 ): readonly TranslationJob[] {
-  const glossaryField =
-    glossary !== undefined && glossary.length > 0 ? { glossary } : {};
+  const glossaryField = glossary !== undefined && glossary.length > 0 ? { glossary } : {};
   const out: TranslationJob[] = [];
   for (const key of keys) {
     if (!isMissingOrEmpty(key, locale)) continue;

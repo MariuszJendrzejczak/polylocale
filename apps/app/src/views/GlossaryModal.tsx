@@ -260,8 +260,7 @@ function EntryEditor(props: EntryEditorProps): ReactElement {
           const dnt = cell?.doNotTranslate === true;
           const translation = cell?.translation ?? '';
           const isBase = locale === baseLocale;
-          const showBaseHint =
-            isBase && translation.trim() === '' && !dnt;
+          const showBaseHint = isBase && translation.trim() === '' && !dnt;
           return (
             <LocaleRow
               key={locale}
@@ -274,7 +273,10 @@ function EntryEditor(props: EntryEditorProps): ReactElement {
                 updatePerLocale(locale, { translation: value, doNotTranslate: dnt })
               }
               onToggleDoNotTranslate={(value) =>
-                updatePerLocale(locale, { translation: value ? '' : translation, doNotTranslate: value })
+                updatePerLocale(locale, {
+                  translation: value ? '' : translation,
+                  doNotTranslate: value,
+                })
               }
             />
           );
@@ -358,9 +360,7 @@ function LocaleRow(props: LocaleRowProps): ReactElement {
         />
         Don&apos;t translate
       </label>
-      {showBaseHint && (
-        <span className={styles.hint}>(no entry for {locale})</span>
-      )}
+      {showBaseHint && <span className={styles.hint}>(no entry for {locale})</span>}
     </>
   );
 }
