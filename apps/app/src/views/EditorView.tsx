@@ -8,7 +8,12 @@ import {
   type ReactElement,
 } from 'react';
 
-import { renderICU, type LocaleCode, type TranslationKey } from '@polylocale/core';
+import {
+  renderICU,
+  type GlossaryEntry,
+  type LocaleCode,
+  type TranslationKey,
+} from '@polylocale/core';
 import { Table, type TableColumn } from '@polylocale/ui';
 import type { OnChangeFn, SortingState } from '@tanstack/react-table';
 
@@ -52,6 +57,7 @@ import { ApiKeyPrompt } from './ApiKeyPrompt.js';
 import { BatchTranslateModal, type AcceptedTranslation } from './BatchTranslateModal.js';
 import { CellEditor } from './CellEditor.js';
 import { FillMissingButton } from './FillMissingButton.js';
+import { GlossaryModal } from './GlossaryModal.js';
 import { KeyCell } from './KeyCell.js';
 import { PassphrasePrompt } from './PassphrasePrompt.js';
 import { SettingsModal } from './SettingsModal.js';
@@ -99,6 +105,7 @@ export function EditorView(): ReactElement {
   const { state, dispatch } = useEditor();
   const inputRef = useRef<HTMLInputElement>(null);
   const initRef = useRef(false);
+  const lastSavedGlossaryRef = useRef<readonly GlossaryEntry[] | undefined>(undefined);
   const [reopen, setReopen] = useState<ReopenPrompt | null>(null);
   const [unlockGate, setUnlockGate] = useState<((success: boolean) => void) | null>(null);
   const [apiKeyGate, setApiKeyGate] = useState<ApiKeyGate | null>(null);
@@ -143,6 +150,7 @@ export function EditorView(): ReactElement {
   const [statusSortDir, setStatusSortDir] = useState<'asc' | 'desc' | null>(null);
   const [addFormOpen, setAddFormOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [glossaryOpen, setGlossaryOpen] = useState(false);
 
   const onOpenSettings = useCallback(async () => {
     if (!secretStore.isUnlocked()) {
@@ -230,6 +238,7 @@ export function EditorView(): ReactElement {
         state.project.baseLocale,
         state.project.locales,
         state.pendingTranslations,
+        state.project.glossary,
       );
       if (jobs.length === 0) return;
       // Mixed-locale row → use the project default (the user can still
@@ -251,6 +260,7 @@ export function EditorView(): ReactElement {
         locale,
         state.project.baseLocale,
         state.pendingTranslations,
+        state.project.glossary,
       );
       if (jobs.length === 0) {
         dispatch({
@@ -324,6 +334,9 @@ export function EditorView(): ReactElement {
         loaded,
         projectName: meta?.projectName ?? handle.name,
         ...(meta?.baseLocale !== undefined ? { baseLocale: meta.baseLocale } : {}),
+        ...(meta?.glossary !== undefined && meta.glossary.length > 0
+          ? { glossary: meta.glossary }
+          : {}),
       });
       dispatch({
         type: 'loaded',
@@ -335,14 +348,35 @@ export function EditorView(): ReactElement {
         skipped,
       });
       setReopen(null);
+      lastSavedGlossaryRef.current = project.glossary;
       await saveEditorMeta({
         projectName: handle.name,
         baseLocale: project.baseLocale,
         lastOpenedAt: Date.now(),
+        ...(project.glossary !== undefined && project.glossary.length > 0
+          ? { glossary: project.glossary }
+          : {}),
       });
     },
     [dispatch],
   );
+
+  const glossary = state.project?.glossary;
+  useEffect(() => {
+    if (state.project === null) {
+      lastSavedGlossaryRef.current = undefined;
+      return;
+    }
+    if (lastSavedGlossaryRef.current === glossary) return;
+    lastSavedGlossaryRef.current = glossary;
+    if (state.fsMode !== 'fs-access') return;
+    void saveEditorMeta({
+      projectName: state.project.name,
+      baseLocale: state.project.baseLocale,
+      lastOpenedAt: Date.now(),
+      ...(glossary !== undefined && glossary.length > 0 ? { glossary } : {}),
+    });
+  }, [glossary, state.project, state.fsMode]);
 
   useEffect(() => {
     if (initRef.current) return;
@@ -392,6 +426,7 @@ export function EditorView(): ReactElement {
         skipped: result.skipped,
       });
       setReopen(null);
+      lastSavedGlossaryRef.current = project.glossary;
       await saveDirectoryHandle(result.directoryHandle);
       await saveEditorMeta({
         projectName: result.directoryName,
@@ -527,6 +562,9 @@ export function EditorView(): ReactElement {
             baseLocale={baseLocale}
             baseValue={row.values[baseLocale]}
             {...(row.description !== undefined ? { description: row.description } : {})}
+            {...(project.glossary !== undefined && project.glossary.length > 0
+              ? { glossary: project.glossary }
+              : {})}
             isPending={pending === 'pending'}
             onStart={() =>
               dispatch({
@@ -683,6 +721,16 @@ export function EditorView(): ReactElement {
             <button
               type="button"
               className={styles.button}
+              onClick={() => setGlossaryOpen(true)}
+              aria-label="Open glossary"
+            >
+              📖 Glossary
+            </button>
+          )}
+          {project !== null && (
+            <button
+              type="button"
+              className={styles.button}
               onClick={() => void onOpenSettings()}
               aria-label="Open settings"
             >
@@ -790,6 +838,17 @@ export function EditorView(): ReactElement {
           secretStore={secretStore}
           onClose={() => setSettingsOpen(false)}
           onSlotMutated={(id) => aiHost.reset(id)}
+        />
+      )}
+      {glossaryOpen && project !== null && (
+        <GlossaryModal
+          project={project}
+          onAdd={(entry) => dispatch({ type: 'addGlossaryEntry', entry })}
+          onUpdate={(previousTerm, entry) =>
+            dispatch({ type: 'updateGlossaryEntry', previousTerm, entry })
+          }
+          onRemove={(term) => dispatch({ type: 'removeGlossaryEntry', term })}
+          onClose={() => setGlossaryOpen(false)}
         />
       )}
       {batch?.phase === 'running' && (
@@ -900,9 +959,11 @@ function jobsForRow(
   baseLocale: LocaleCode,
   locales: readonly LocaleCode[],
   pending: ReadonlyMap<string, unknown>,
+  glossary: readonly GlossaryEntry[] | undefined,
 ): readonly TranslationJob[] {
   const baseValue = key.values[baseLocale];
   if (baseValue === undefined) return [];
+  const glossaryField = glossary !== undefined && glossary.length > 0 ? { glossary } : {};
   const out: TranslationJob[] = [];
   for (const locale of locales) {
     if (locale === baseLocale) continue;
@@ -915,6 +976,7 @@ function jobsForRow(
       baseLocale,
       baseIr: baseValue.ir,
       ...(key.description !== undefined ? { description: key.description } : {}),
+      ...glossaryField,
     });
   }
   return out;
@@ -925,7 +987,9 @@ function jobsForLocale(
   locale: LocaleCode,
   baseLocale: LocaleCode,
   pending: ReadonlyMap<string, unknown>,
+  glossary: readonly GlossaryEntry[] | undefined,
 ): readonly TranslationJob[] {
+  const glossaryField = glossary !== undefined && glossary.length > 0 ? { glossary } : {};
   const out: TranslationJob[] = [];
   for (const key of keys) {
     if (!isMissingOrEmpty(key, locale)) continue;
@@ -939,6 +1003,7 @@ function jobsForLocale(
       baseLocale,
       baseIr: baseValue.ir,
       ...(key.description !== undefined ? { description: key.description } : {}),
+      ...glossaryField,
     });
   }
   return out;

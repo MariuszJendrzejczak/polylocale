@@ -51,9 +51,14 @@ What's been built so far (verify with `git log --oneline`):
   inspect / add / replace / delete per-provider slots, change
   passphrase in one atomic IDB transaction, `aiHost.reset()` on every
   mutation so the next translation rebuilds against the new key.
+- ✅ **Session 10** — Glossary editor + per-project persistence:
+  topbar 📖 Glossary modal feeds `LocalizationProject.glossary`,
+  reducer actions stay outside `dirty`, `EditorMeta.glossary` carries
+  it across reloads, every translation site (per-cell ✦, per-row,
+  per-locale) forwards the glossary to `provider.translate`.
 
-What's next: **session 10 (glossary UI)**, **session 11 (diff view)**,
-**session 12 (CSV / XLSX translator handoff)**.
+What's next: **session 11 (diff view)**, **session 12 (CSV / XLSX
+translator handoff)**.
 
 ---
 
