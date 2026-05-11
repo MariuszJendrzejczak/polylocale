@@ -26,6 +26,7 @@ import {
   parseNestedJson,
 } from '@polylocale/core';
 import type {
+  GlossaryEntry,
   LocaleCode,
   LocalizationProject,
   ParsedFile,
@@ -108,6 +109,7 @@ export interface ComposeFromLoadedInput {
   readonly projectName: string;
   readonly baseLocale?: LocaleCode;
   readonly settings?: ProjectSettings;
+  readonly glossary?: readonly GlossaryEntry[];
 }
 
 export function composeFromLoaded(input: ComposeFromLoadedInput): LocalizationProject {
@@ -116,13 +118,17 @@ export function composeFromLoaded(input: ComposeFromLoadedInput): LocalizationPr
     throw new Error('composeFromLoaded: no parsed files supplied');
   }
   const baseLocale = input.baseLocale ?? sources[0]!.locale;
-  return composeProject({
+  const project = composeProject({
     id: crypto.randomUUID(),
     name: input.projectName,
     baseLocale,
     sources,
     ...(input.settings !== undefined ? { settings: input.settings } : {}),
   });
+  if (input.glossary !== undefined && input.glossary.length > 0) {
+    return { ...project, glossary: input.glossary };
+  }
+  return project;
 }
 
 export interface SaveToDirectoryInput {

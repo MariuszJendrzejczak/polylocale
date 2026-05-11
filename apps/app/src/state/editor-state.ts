@@ -7,6 +7,7 @@
  */
 
 import type {
+  GlossaryEntry,
   ICUNode,
   KeyStatus,
   LocaleCode,
@@ -111,6 +112,13 @@ export type EditorAction =
       readonly default?: string;
       readonly perLocale?: { readonly locale: LocaleCode; readonly provider: string };
     }
+  | { readonly type: 'addGlossaryEntry'; readonly entry: GlossaryEntry }
+  | {
+      readonly type: 'updateGlossaryEntry';
+      readonly previousTerm: string;
+      readonly entry: GlossaryEntry;
+    }
+  | { readonly type: 'removeGlossaryEntry'; readonly term: string }
   | { readonly type: 'markSaved'; readonly at: number }
   | { readonly type: 'banner'; readonly banner: EditorBanner | null }
   | { readonly type: 'reset' };
@@ -308,6 +316,38 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       if (sameAiPrefs(settings.aiProviderPrefs, current)) return state;
       return { ...state, project: { ...project, settings } };
     }
+    case 'addGlossaryEntry': {
+      const project = state.project;
+      if (project === null) return state;
+      const current = project.glossary ?? [];
+      if (current.some((e) => e.term === action.entry.term)) return state;
+      const next = [...current, action.entry];
+      return { ...state, project: withGlossary(project, next) };
+    }
+    case 'updateGlossaryEntry': {
+      const project = state.project;
+      if (project === null) return state;
+      const current = project.glossary ?? [];
+      const idx = current.findIndex((e) => e.term === action.previousTerm);
+      if (idx === -1) return state;
+      if (
+        action.entry.term !== action.previousTerm &&
+        current.some((e, i) => i !== idx && e.term === action.entry.term)
+      ) {
+        return state;
+      }
+      const next = current.slice();
+      next[idx] = action.entry;
+      return { ...state, project: withGlossary(project, next) };
+    }
+    case 'removeGlossaryEntry': {
+      const project = state.project;
+      if (project === null) return state;
+      const current = project.glossary ?? [];
+      const next = current.filter((e) => e.term !== action.term);
+      if (next.length === current.length) return state;
+      return { ...state, project: withGlossary(project, next) };
+    }
     case 'markSaved': {
       return { ...state, dirty: new Set(), lastSavedAt: action.at, banner: null };
     }
@@ -431,6 +471,18 @@ function withoutPending(
     if (next.delete(pendingKey(entry.keyId, entry.locale))) mutated = true;
   }
   return mutated ? next : current;
+}
+
+function withGlossary(
+  project: LocalizationProject,
+  entries: readonly GlossaryEntry[],
+): LocalizationProject {
+  if (entries.length === 0) {
+    if (project.glossary === undefined) return project;
+    const { glossary: _omit, ...rest } = project;
+    return rest;
+  }
+  return { ...project, glossary: entries };
 }
 
 function computeStatus(

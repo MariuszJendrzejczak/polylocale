@@ -326,6 +326,93 @@ describe('editorReducer', () => {
     expect(same).toBe(state);
   });
 
+  it('addGlossaryEntry appends a new entry and does not dirty any key', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, {
+      type: 'addGlossaryEntry',
+      entry: { term: 'polylocale', perLocale: { pl: { doNotTranslate: true } } },
+    });
+    expect(next.project!.glossary).toEqual([
+      { term: 'polylocale', perLocale: { pl: { doNotTranslate: true } } },
+    ]);
+    expect(next.dirty).toBe(state.dirty);
+  });
+
+  it('addGlossaryEntry is a no-op when term already exists', () => {
+    let state = loaded(projectWithTwoKeys());
+    state = editorReducer(state, {
+      type: 'addGlossaryEntry',
+      entry: { term: 'polylocale', perLocale: {} },
+    });
+    const same = editorReducer(state, {
+      type: 'addGlossaryEntry',
+      entry: { term: 'polylocale', perLocale: { pl: { doNotTranslate: true } } },
+    });
+    expect(same).toBe(state);
+  });
+
+  it('updateGlossaryEntry renames a term and updates per-locale', () => {
+    let state = loaded(projectWithTwoKeys());
+    state = editorReducer(state, {
+      type: 'addGlossaryEntry',
+      entry: { term: 'polylocale', perLocale: {} },
+    });
+    const next = editorReducer(state, {
+      type: 'updateGlossaryEntry',
+      previousTerm: 'polylocale',
+      entry: { term: 'polylocale-tool', perLocale: { pl: { translation: 'narzędzie' } } },
+    });
+    expect(next.project!.glossary).toEqual([
+      { term: 'polylocale-tool', perLocale: { pl: { translation: 'narzędzie' } } },
+    ]);
+    expect(next.dirty).toBe(state.dirty);
+  });
+
+  it('updateGlossaryEntry rejects renaming onto an existing term', () => {
+    let state = loaded(projectWithTwoKeys());
+    state = editorReducer(state, {
+      type: 'addGlossaryEntry',
+      entry: { term: 'one', perLocale: {} },
+    });
+    state = editorReducer(state, {
+      type: 'addGlossaryEntry',
+      entry: { term: 'two', perLocale: {} },
+    });
+    const same = editorReducer(state, {
+      type: 'updateGlossaryEntry',
+      previousTerm: 'one',
+      entry: { term: 'two', perLocale: {} },
+    });
+    expect(same).toBe(state);
+  });
+
+  it('updateGlossaryEntry is a no-op when previousTerm is unknown', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, {
+      type: 'updateGlossaryEntry',
+      previousTerm: 'missing',
+      entry: { term: 'missing', perLocale: {} },
+    });
+    expect(next).toBe(state);
+  });
+
+  it('removeGlossaryEntry drops the entry and collapses to undefined when empty', () => {
+    let state = loaded(projectWithTwoKeys());
+    state = editorReducer(state, {
+      type: 'addGlossaryEntry',
+      entry: { term: 'polylocale', perLocale: {} },
+    });
+    const next = editorReducer(state, { type: 'removeGlossaryEntry', term: 'polylocale' });
+    expect(next.project!.glossary).toBeUndefined();
+    expect(next.dirty).toBe(state.dirty);
+  });
+
+  it('removeGlossaryEntry is a no-op when term is unknown', () => {
+    const state = loaded(projectWithTwoKeys());
+    const next = editorReducer(state, { type: 'removeGlossaryEntry', term: 'no-such' });
+    expect(next).toBe(state);
+  });
+
   it('loaded resets pendingTranslations', () => {
     let state = loaded(projectWithTwoKeys());
     state = editorReducer(state, {

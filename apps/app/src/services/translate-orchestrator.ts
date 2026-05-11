@@ -16,7 +16,7 @@
  */
 
 import { collectTextNodes, UnsupportedLocaleError, type AIProvider } from '@polylocale/ai';
-import type { ICUNode, LocaleCode } from '@polylocale/core';
+import type { GlossaryEntry, ICUNode, LocaleCode } from '@polylocale/core';
 
 export interface TranslationJob {
   readonly keyId: string;
@@ -25,6 +25,7 @@ export interface TranslationJob {
   readonly baseLocale: LocaleCode;
   readonly baseIr: readonly ICUNode[];
   readonly description?: string;
+  readonly glossary?: readonly GlossaryEntry[];
 }
 
 export type TranslationStatus =
@@ -99,6 +100,9 @@ async function runOne(
       ...(job.description !== undefined
         ? { context: { keyPath: job.keyPath, description: job.description } }
         : { context: { keyPath: job.keyPath } }),
+      ...(job.glossary !== undefined && job.glossary.length > 0
+        ? { glossary: job.glossary }
+        : {}),
     });
     return { job, status: { kind: 'ready', ir } };
   } catch (err) {

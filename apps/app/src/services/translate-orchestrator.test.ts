@@ -80,6 +80,26 @@ describe('runTranslations', () => {
     }
   });
 
+  it('forwards a job glossary onto provider.translate when present', async () => {
+    const translate = vi.fn<AIProvider['translate']>(async ({ nodes }) => nodes);
+    const provider: AIProvider = { id: 'stub', translate };
+    const glossary = [
+      { term: 'polylocale', perLocale: { pl: { doNotTranslate: true as const } } },
+    ];
+    await runTranslations([job({ glossary })], provider);
+    expect(translate).toHaveBeenCalledTimes(1);
+    const call = translate.mock.calls[0]![0];
+    expect(call.glossary).toEqual(glossary);
+  });
+
+  it('omits the glossary field on provider.translate when the job has none', async () => {
+    const translate = vi.fn<AIProvider['translate']>(async ({ nodes }) => nodes);
+    const provider: AIProvider = { id: 'stub', translate };
+    await runTranslations([job()], provider);
+    const call = translate.mock.calls[0]![0];
+    expect('glossary' in call).toBe(false);
+  });
+
   it('stops dispatching new jobs after the abort signal fires', async () => {
     let count = 0;
     const controller = new AbortController();

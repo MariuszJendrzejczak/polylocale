@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 
-import { renderICU, type ICUNode, type LocaleCode, type TranslationValue } from '@polylocale/core';
+import {
+  renderICU,
+  type GlossaryEntry,
+  type ICUNode,
+  type LocaleCode,
+  type TranslationValue,
+} from '@polylocale/core';
 import { collectTextNodes, UnsupportedLocaleError } from '@polylocale/ai';
 
 import {
@@ -20,6 +26,7 @@ export interface AiCellActionProps {
   readonly baseLocale: LocaleCode;
   readonly baseValue: TranslationValue | undefined;
   readonly description?: string;
+  readonly glossary?: readonly GlossaryEntry[];
   readonly isPending: boolean;
   readonly onStart: () => void;
   readonly onClear: () => void;
@@ -42,6 +49,7 @@ export function AiCellAction(props: AiCellActionProps): ReactElement | null {
     baseLocale,
     baseValue,
     description,
+    glossary,
     isPending,
     onStart,
     onClear,
@@ -112,6 +120,7 @@ export function AiCellAction(props: AiCellActionProps): ReactElement | null {
         ...(description !== undefined
           ? { context: { keyPath, description } }
           : { context: { keyPath } }),
+        ...(glossary !== undefined && glossary.length > 0 ? { glossary } : {}),
       });
       if (controller.signal.aborted) return;
       const raw = renderICU(translatedNodes);

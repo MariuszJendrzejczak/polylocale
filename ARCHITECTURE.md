@@ -644,6 +644,33 @@ same message in a soft-error style (Close only) instead of dispatching
 a banner — the user can pick a different target locale and try
 again.
 
+#### Glossary flow
+
+`project.glossary` lives at the project level and is editable from a
+modal reachable via the topbar 📖 Glossary button
+(`apps/app/src/views/GlossaryModal.tsx`). Edits dispatch
+`addGlossaryEntry` / `updateGlossaryEntry` / `removeGlossaryEntry`
+on the reducer, which mutate `state.project.glossary` immutably and
+**do not** touch `state.dirty` — glossary is a project-level concern,
+not a per-key edit. The modal persists across reloads through
+`EditorMeta.glossary` (`apps/app/src/services/persistence.ts`); the
+sibling project-file option is left for the day a real `.polylocale`
+file lands.
+
+Every translation site forwards the current glossary to
+`provider.translate({ glossary })`:
+
+- per-cell ✦ — `AiCellAction` receives a `glossary?` prop from the
+  column factory and attaches it to the request,
+- per-row "Translate missing locales" and per-locale "Fill missing
+  for…" — `jobsForRow` / `jobsForLocale` write the glossary onto each
+  `TranslationJob`, and `runOne` forwards it.
+
+DeepL turns the glossary into a `/v2/glossaries` lookup (§4.7). The
+LLM helper appends glossary entries as advisory hints inside the
+system prompt (§4.6). The wire was live since Session 8 — the editor
+side that finally feeds it landed in Session 10.
+
 ### 4.6 LLM masking strategy
 
 LLM-backed providers (OpenAI, Anthropic) all share
