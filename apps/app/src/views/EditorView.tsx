@@ -56,6 +56,7 @@ import { AiCellAction } from './AiCellAction.js';
 import { ApiKeyPrompt } from './ApiKeyPrompt.js';
 import { BatchTranslateModal, type AcceptedTranslation } from './BatchTranslateModal.js';
 import { CellEditor } from './CellEditor.js';
+import { DiffView } from './DiffView.js';
 import { FillMissingButton } from './FillMissingButton.js';
 import { GlossaryModal } from './GlossaryModal.js';
 import { KeyCell } from './KeyCell.js';
@@ -687,6 +688,28 @@ export function EditorView(): ReactElement {
         </div>
         <div className={styles.actions}>
           {project !== null && (
+            <div className={styles.viewTabs} role="tablist" aria-label="Editor view">
+              <button
+                type="button"
+                role="tab"
+                className={`${styles.viewTab} ${state.view === 'editor' ? styles.viewTabActive : ''}`}
+                aria-selected={state.view === 'editor'}
+                onClick={() => dispatch({ type: 'setView', view: 'editor' })}
+              >
+                Editor
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className={`${styles.viewTab} ${state.view === 'diff' ? styles.viewTabActive : ''}`}
+                aria-selected={state.view === 'diff'}
+                onClick={() => dispatch({ type: 'setView', view: 'diff' })}
+              >
+                Diff
+              </button>
+            </div>
+          )}
+          {project !== null && (
             <input
               type="search"
               className={styles.searchInput}
@@ -802,6 +825,8 @@ export function EditorView(): ReactElement {
       <main className={styles.body}>
         {project === null ? (
           <EmptyState onOpenFolder={onOpenFolder} supportsPicker={supportsPicker} />
+        ) : state.view === 'diff' ? (
+          <DiffView />
         ) : (
           <Table<TranslationKey>
             rows={tableRows}
