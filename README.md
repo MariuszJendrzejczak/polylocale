@@ -1,8 +1,17 @@
 # polylocale
 
+[![CI](https://github.com/MariuszJendrzejczak/polylocale/actions/workflows/ci.yml/badge.svg)](https://github.com/MariuszJendrzejczak/polylocale/actions/workflows/ci.yml)
+[![Deploy](https://github.com/MariuszJendrzejczak/polylocale/actions/workflows/deploy.yml/badge.svg)](https://github.com/MariuszJendrzejczak/polylocale/actions/workflows/deploy.yml)
+
 Open-source, web-based localization manager. Phase 1 is **Flutter-first** —
 import, edit, AI-translate, and export `.arb` and JSON locale files, in your
 browser, with your own AI keys, with your files staying on your machine.
+
+**Try it:** <https://polilocale.buzzards-soft.com>
+
+> Pre-alpha. Works in Chromium-based browsers (File System Access API).
+> DeepL is **not** wired on the hosted version yet — use OpenAI or
+> Anthropic providers instead. See [`docs/deployment-plan.md`](./docs/deployment-plan.md) §6 for why.
 
 > **Status:** pre-alpha. The core layer ships flat-JSON and ARB
 > parsers + exporters with structural ICU IR and round-trip property

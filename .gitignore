@@ -37,3 +37,7 @@ coverage/
 
 # Vite
 .vite/
+
+# Firebase
+.firebase/
+firebase-debug.log
