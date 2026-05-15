@@ -1,8 +1,8 @@
 # CLAUDE.md
 
 > Instructions for Claude Code (and any AI agent) working in this repo.
-> For product context see [`PROJECT.md`](./PROJECT.md). For architecture and
-> stack rationale see [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+> For product context see [`docs/PROJECT.md`](./docs/PROJECT.md). For
+> architecture and stack rationale see [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 
 ---
 
@@ -46,9 +46,7 @@ polylocale/
 │  ├─ core/                 Model + parsers + exporters (zero UI/AI deps)
 │  ├─ ai/                   Provider abstraction + adapters
 │  └─ ui/                   Reusable React components
-├─ doc/BRIEF.md             Original kickoff brief — preserved verbatim
-├─ PROJECT.md               Living product reference
-├─ ARCHITECTURE.md          Architecture & stack decisions
+├─ docs/                    Long-form docs (PROJECT, ARCHITECTURE, BRIEF, deployment-plan, …)
 ├─ CLAUDE.md                This file
 └─ .github/workflows/ci.yml Lint + typecheck + test on PR and push to main
 ```
