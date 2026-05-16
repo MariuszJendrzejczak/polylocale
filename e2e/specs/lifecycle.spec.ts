@@ -34,7 +34,8 @@ test.describe('A. Project lifecycle', () => {
     await expect.poll(() => editor.currentBaseLocale()).toBe('en');
   });
 
-  test('A2 — edit cell, save, downloaded blob matches golden', async ({ page }) => {
+  // Fixme: deterministic CI-only timeout — see issue #9.
+  test.fixme('A2 — edit cell, save, downloaded blob matches golden', async ({ page }) => {
     const editor = new EditorPage(page);
     await editor.openFiles('basic-arb');
 

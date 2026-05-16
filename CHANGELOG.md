@@ -13,6 +13,10 @@ and the project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v
 - `CHANGELOG.md` (this file).
 - CI: workflow-level `permissions: contents: read`, unified `pnpm/action-setup@v6`, blocking `pnpm audit` step.
 
+### Known issues
+
+- E2E `A2 — edit cell, save, downloaded blob matches golden` is marked `.fixme` due to a CI-only download-event timeout. Passes locally. Tracked in [#9](https://github.com/MariuszJendrzejczak/polylocale/issues/9).
+
 ## [0.1.0] — 2026-05-16
 
 First hosted release. Live at <https://polilocale-9c242.web.app/>.
