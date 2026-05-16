@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/MariuszJendrzejczak/polylocale/security/advisories/new
+    about: Please report security issues privately via GitHub Security Advisories. See SECURITY.md for details.
+  - name: Architecture / design question
+    url: https://github.com/MariuszJendrzejczak/polylocale/blob/main/docs/ARCHITECTURE.md
+    about: Many design decisions are documented in ARCHITECTURE.md. Read first, then open an issue if something is missing or unclear.
