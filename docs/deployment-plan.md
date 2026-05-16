@@ -13,18 +13,18 @@
 
 ## 0. Decisions locked in
 
-| Decision                  | Value                                                                |
-| ------------------------- | -------------------------------------------------------------------- |
-| Hosting provider          | Firebase Hosting (Spark / free plan)                                 |
-| Firebase project          | **New, dedicated project** — isolated from `buzzards-soft.com`       |
-| Public URL                | `https://polilocale.buzzards-soft.com`                               |
-| Deploy trigger            | Push of a git tag matching `v*.*.*` (+ manual `workflow_dispatch`)   |
-| Build command             | `pnpm -F @polylocale/app build` → `apps/app/dist`                    |
-| GitHub Action             | `FirebaseExtended/action-hosting-deploy@v0`                          |
-| DeepL on production       | **Not wired in this iteration** — see §6 "Known limitations"         |
-| OpenAI / Anthropic on prod| Works out of the box (CORS-friendly endpoints, see ARCHITECTURE §4.6)|
-| Cloud organization        | **None** — standalone project; org migration + WIF deferred (see §6) |
-| Firebase project id       | `polilocale-9c242`                                                   |
+| Decision                   | Value                                                                 |
+| -------------------------- | --------------------------------------------------------------------- |
+| Hosting provider           | Firebase Hosting (Spark / free plan)                                  |
+| Firebase project           | **New, dedicated project** — isolated from `buzzards-soft.com`        |
+| Public URL                 | `https://polilocale.buzzards-soft.com`                                |
+| Deploy trigger             | Push of a git tag matching `v*.*.*` (+ manual `workflow_dispatch`)    |
+| Build command              | `pnpm -F @polylocale/app build` → `apps/app/dist`                     |
+| GitHub Action              | `FirebaseExtended/action-hosting-deploy@v0`                           |
+| DeepL on production        | **Not wired in this iteration** — see §6 "Known limitations"          |
+| OpenAI / Anthropic on prod | Works out of the box (CORS-friendly endpoints, see ARCHITECTURE §4.6) |
+| Cloud organization         | **None** — standalone project; org migration + WIF deferred (see §6)  |
+| Firebase project id        | `polilocale-9c242`                                                    |
 
 ---
 
@@ -81,7 +81,7 @@ dialog will appear when you try to create a new project).
 
 > Only works when the project is **outside** a Google Cloud organization
 > that enforces `iam.disableServiceAccountKeyCreation`. If you see
-> *"Key creation is not allowed on this service account"*, the project
+> _"Key creation is not allowed on this service account"_, the project
 > was attached to an org — either detach and recreate (§2.2 step 3) or
 > follow the WIF path described in §6.
 
@@ -182,6 +182,7 @@ files below plus README and `.gitignore` deltas.
 ```
 
 Notes:
+
 - `public` is the Vite output, not the workspace root.
 - `rewrites` is forward-compat for adding a router later. With the current
   single-page UI it is a no-op.
@@ -244,6 +245,7 @@ jobs:
 ```
 
 Deliberate choices:
+
 - **No `needs: ci`.** Tags are only cut from green main, so the CI run
   on the merge commit already protects us. Re-running lint/typecheck/test
   on a deploy adds 3+ minutes for no extra signal.
@@ -393,14 +395,14 @@ spin up isolated preview URLs. Skipped now to keep the workflow short.
 
 ## 7. Troubleshooting
 
-| Symptom                                        | Likely cause                                        | Fix                                                                                              |
-| ---------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Workflow fails at "Deploy" with `auth/...`     | Wrong / malformed JSON in `FIREBASE_SERVICE_ACCOUNT_POLILOCALE` | Regenerate the key in §2.3, paste the full JSON again.                                           |
-| Workflow succeeds, but `*.web.app` shows 404   | `firebase.json` `public` path wrong                 | Confirm it is `apps/app/dist` (Vite default), not `dist` or `public`.                            |
-| Workflow succeeds, custom domain shows old build | DNS cached / Firebase CDN edge cache               | Hard-refresh; wait 1–5 min; check Hosting → Release history shows the new release as Active.    |
-| `ERR_SSL_PROTOCOL_ERROR` on custom domain      | TLS cert not yet provisioned by Firebase            | Wait up to 24h after DNS verification. Firebase shows "Provisioning" state during this window.   |
-| Build fails locally but not in CI (or vice versa) | Lockfile drift                                    | `pnpm install --frozen-lockfile` locally; commit any `pnpm-lock.yaml` diff.                      |
-| `Cache-Control` missing on assets              | `firebase.json` `headers` glob did not match        | Verify file path under `dist/` matches `/assets/**`; Vite outputs there by default.              |
+| Symptom                                           | Likely cause                                                    | Fix                                                                                            |
+| ------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Workflow fails at "Deploy" with `auth/...`        | Wrong / malformed JSON in `FIREBASE_SERVICE_ACCOUNT_POLILOCALE` | Regenerate the key in §2.3, paste the full JSON again.                                         |
+| Workflow succeeds, but `*.web.app` shows 404      | `firebase.json` `public` path wrong                             | Confirm it is `apps/app/dist` (Vite default), not `dist` or `public`.                          |
+| Workflow succeeds, custom domain shows old build  | DNS cached / Firebase CDN edge cache                            | Hard-refresh; wait 1–5 min; check Hosting → Release history shows the new release as Active.   |
+| `ERR_SSL_PROTOCOL_ERROR` on custom domain         | TLS cert not yet provisioned by Firebase                        | Wait up to 24h after DNS verification. Firebase shows "Provisioning" state during this window. |
+| Build fails locally but not in CI (or vice versa) | Lockfile drift                                                  | `pnpm install --frozen-lockfile` locally; commit any `pnpm-lock.yaml` diff.                    |
+| `Cache-Control` missing on assets                 | `firebase.json` `headers` glob did not match                    | Verify file path under `dist/` matches `/assets/**`; Vite outputs there by default.            |
 
 ---
 
