@@ -71,3 +71,23 @@ export class ProviderHttpError extends Error {
     this.body = body;
   }
 }
+
+/**
+ * Thrown by LLM-backed providers when the model's response does not match
+ * the expected JSON shape — `{translations: string[]}` of identical length
+ * to the request, every element a string. The original response (truncated)
+ * is preserved on `body` so callers can surface enough detail to debug.
+ */
+export class LLMResponseError extends Error {
+  readonly providerId: string;
+  readonly reason: string;
+  readonly body: string;
+
+  constructor(providerId: string, reason: string, body: string) {
+    super(`${providerId}: ${reason} — ${body.slice(0, 200)}`);
+    this.name = 'LLMResponseError';
+    this.providerId = providerId;
+    this.reason = reason;
+    this.body = body;
+  }
+}

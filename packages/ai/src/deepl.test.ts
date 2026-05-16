@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ICUNode } from '@polylocale/core';
+import type { GlossaryEntry, ICUNode } from '@polylocale/core';
 import { createDeepLProvider } from './deepl.js';
+import type { DeepLGlossaryService } from './deepl-glossary.js';
 import { ProviderHttpError, UnsupportedLocaleError } from './provider.js';
 
 interface CapturedCall {
@@ -215,5 +216,79 @@ describe('createDeepLProvider', () => {
         to: 'pl',
       }),
     ).rejects.toThrowError(/2 translations for 1 inputs/);
+  });
+
+  describe('glossary integration', () => {
+    const ENTRIES: readonly GlossaryEntry[] = [
+      { term: 'Save', perLocale: { pl: { translation: 'Zapisz' } } },
+    ];
+
+    function stubGlossaryService(id: string | undefined): {
+      readonly service: DeepLGlossaryService;
+      readonly ensure: ReturnType<typeof vi.fn>;
+    } {
+      const ensure = vi.fn(async () => id);
+      return {
+        ensure,
+        service: { ensure } as DeepLGlossaryService,
+      };
+    }
+
+    it('skips the glossary service when request.glossary is empty', async () => {
+      const { fn } = fakeFetch({ body: { translations: [{ text: 'Witaj' }] } });
+      const { service, ensure } = stubGlossaryService('glo-x');
+      const provider = createDeepLProvider({
+        apiKey: 'k:fx',
+        fetch: fn,
+        glossaryService: service,
+      });
+      await provider.translate({
+        nodes: [{ kind: 'text', value: 'Hello' }],
+        from: 'en',
+        to: 'pl',
+      });
+      expect(ensure).not.toHaveBeenCalled();
+    });
+
+    it('passes glossary_id on /v2/translate when ensure resolves to an id', async () => {
+      const { fn, captured } = fakeFetch({ body: { translations: [{ text: 'Zapisz' }] } });
+      const { service, ensure } = stubGlossaryService('glo-deterministic');
+      const provider = createDeepLProvider({
+        apiKey: 'k:fx',
+        fetch: fn,
+        glossaryService: service,
+      });
+      await provider.translate({
+        nodes: [{ kind: 'text', value: 'Save' }],
+        from: 'en',
+        to: 'pl',
+        glossary: ENTRIES,
+      });
+      expect(ensure).toHaveBeenCalledExactlyOnceWith({
+        from: 'en',
+        to: 'pl',
+        entries: ENTRIES,
+      });
+      const body = JSON.parse(captured[0]!.init.body as string) as Record<string, unknown>;
+      expect(body.glossary_id).toBe('glo-deterministic');
+    });
+
+    it('omits glossary_id when ensure returns undefined (unsupported pair)', async () => {
+      const { fn, captured } = fakeFetch({ body: { translations: [{ text: 'Zapisz' }] } });
+      const { service } = stubGlossaryService(undefined);
+      const provider = createDeepLProvider({
+        apiKey: 'k:fx',
+        fetch: fn,
+        glossaryService: service,
+      });
+      await provider.translate({
+        nodes: [{ kind: 'text', value: 'Save' }],
+        from: 'en',
+        to: 'pl',
+        glossary: ENTRIES,
+      });
+      const body = JSON.parse(captured[0]!.init.body as string) as Record<string, unknown>;
+      expect(body.glossary_id).toBeUndefined();
+    });
   });
 });

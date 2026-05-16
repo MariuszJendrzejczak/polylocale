@@ -37,3 +37,11 @@ coverage/
 
 # Vite
 .vite/
+
+# Firebase
+.firebase/
+firebase-debug.log
+
+# Local-only docs (sprint working files, personal notes)
+docs/local/
+docs/sprints/

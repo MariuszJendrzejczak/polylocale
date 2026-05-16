@@ -136,6 +136,34 @@ back to `Text('#')`. The two-step is a fixed point, so the IR stays
 stable even though the surface representation flips between Pound and
 literal-text on each side of the boundary.
 
+### Structural equality vs byte equality of the IR
+
+Two equality predicates live next to each other in
+`packages/core/src/icu/` and answer different questions about the same
+`ICUNode[]` shape.
+
+- **`icuEqual(a, b)`** — byte-identical IR. Same node order, same text
+  values, same placeholder types and formats, same plural offsets, same
+  case-key sets and bodies. Used by the flat-JSON exporter's `raw`
+  shortcut (skip the renderer when the parsed IR is byte-identical to
+  the imported one) and by the round-trip property tests in
+  `icu/round-trip.test.ts` (`parseICU(renderICU(parseICU(s)))` ≡
+  `parseICU(s)`).
+- **`icuStructuralEqual(a, b)`** — same _skeleton_, text content
+  ignored. Placeholder _names_, plural/select arg names, plural offsets,
+  case-key sets, and tag names must match exactly; text values, and
+  placeholder `type`/`format` modifiers, are not compared. Used by the
+  diff view to surface keys whose underlying message changed between
+  two locales (placeholder renamed, plural case dropped, tag swapped) —
+  a positive result is the precondition for "AI translation of A is a
+  legal translation of B" because the non-text structure is what the
+  masking primitive in `packages/ai/src/icu-walk.ts` preserves across
+  the network call.
+
+If we later want a stricter "skeleton including placeholder type" check
+(say, for a "did the formatter change" inspector), it lands as a third
+predicate next to these two rather than tightening either one.
+
 ### ARB-specific decisions
 
 ARB (Application Resource Bundle, Flutter's native format) is the first
@@ -419,6 +447,21 @@ Each decision below uses Decision / Context / Alternatives / Consequences.
   `set` / `get` / `delete` / `list` require an unlocked store.
   `lock()` drops the in-memory `CryptoKey`; the IDB blobs stay, the
   next `unlock` rebuilds the key from the stored salt.
+- **Passphrase rotation:** `changePassphrase(old, new)` runs in three
+  phases. (1) Verify `old` against the stored verifier (same path as
+  `unlock`; wrong passphrase → `InvalidPassphraseError`, IDB
+  untouched). (2) Read every slot record and decrypt its ciphertext
+  in memory under the old key; any decrypt failure (e.g. an
+  AAD-bound blob someone tampered with) throws before any write
+  opens, so the IDB state is preserved exactly. (3) Generate a fresh
+  salt, derive a new `CryptoKey` from `new`, encrypt a fresh
+  verifier and one fresh ciphertext per slot, then commit the new
+  meta record together with the full set of re-encrypted slot
+  records inside a **single** readwrite transaction spanning both
+  object stores. Browsers roll the transaction back atomically on
+  any commit error, so partial-rotation states are not observable.
+  On success the in-memory `CryptoKey` is swapped to the new one;
+  the store stays unlocked under `new`.
 - **Testability:** the factory takes `IDBFactory` and `Crypto` as
   options. Tests substitute `fake-indexeddb`; production uses
   `globalThis.indexedDB` and `globalThis.crypto`. Node 22 ships
@@ -507,16 +550,249 @@ shape is therefore **never direct**:
 - **Node / CLI:** no proxy needed — pass DeepL's real URL as
   `endpoint` and the runtime's global `fetch` reaches it directly.
 
-### 4.4 LLM providers (deferred)
+### 4.4 LLM providers
 
 The interface is identical for LLM-backed providers — they too
-receive `ICUNode[]` and return `ICUNode[]`. The masking strategy may
-differ: a structured prompt that lists every text fragment with a
-stable index and asks the model to return the same JSON shape lets us
-keep the round-trip guarantee even when individual calls translate
-many keys at once. The `context.description` and `glossary` fields
-exist on the request shape today specifically to give those providers
-something to work with later — DeepL just ignores them.
+receive `ICUNode[]` and return `ICUNode[]`. The masking strategy is
+shared via `packages/ai/src/llm-translate.ts`; see §4.6 for the JSON
+fragment-prompt contract, the `LLMResponseError` shape, and the
+per-call cap that keeps individual prompts within token budgets.
+`context.description` and `glossary` are now actually used by the LLM
+adapters (the DeepL adapter wires `glossary` through its own
+`/v2/glossaries` flow — see §4.7).
+
+### 4.5 AI in the editor
+
+`apps/app` plugs the §4 provider surface into the tabular editor with
+three entry points (per-cell ✦, per-row "⋯ Translate missing
+locales", per-locale "Fill missing for…") and one hard rule:
+**nothing lands in the model that the user has not explicitly
+approved**.
+
+#### Where the API keys live
+
+Each provider has its own slot in the encrypted secret store from
+§3.10:
+
+- DeepL → `'deepl-api-key'`
+- OpenAI → `'openai-api-key'`
+- Anthropic → `'anthropic-api-key'`
+
+The slot map and per-provider factories live in
+`apps/app/src/services/ai-provider-host.ts`; call sites pass a
+`ProviderId` (`'deepl' | 'openai' | 'anthropic'`) to
+`getProvider(id)` and the host walks the right slot, prompts for the
+right label, and caches per-id. The project file never carries any
+key (`ProjectSettings` has no field for keys on purpose) — a `.json`
+/ `.arb` the user opens or commits is always safe to share.
+Day-to-day inspection and rotation of those slots — and of the
+passphrase that protects them — lives in the Settings modal
+(`apps/app/src/views/SettingsModal.tsx`), reached from the topbar.
+
+Default and per-locale provider choice live in
+`ProjectSettings.aiProviderPrefs` (`{ default?, perLocale? }`). The
+editor reads `prefs.perLocale[locale] ?? prefs.default ?? 'deepl'`
+when picking the provider for a translation; the topbar dropdown
+writes `prefs.default`, and reducer action `setAiProviderPref` is the
+single mutation point.
+
+`apps/app/src/services/ai-provider-host.ts` is the lazy host:
+`getProvider()` first ensures the secret store is unlocked
+(`requestUnlock` gate → passphrase modal), then ensures the slot has
+a value (`requestApiKey` gate → key modal), then caches a
+`createDeepLProvider` instance against that key. Cancelling either
+gate returns `null` cleanly so the calling action no-ops without a
+banner. The default endpoint is `/api/deepl/v2/translate` so the
+Vite dev proxy and any production same-origin proxy take over CORS
+(see §4.3) — adapter signature unchanged.
+
+#### End-to-end masking
+
+The editor never serializes ICU structure into a request body. It
+hands `value.ir` straight to `provider.translate()` and stores the
+returned `ICUNode[]` straight back. `collectTextNodes` (§4) does the
+masking inside the provider; the editor's only contribution is to
+respect the contract — _no `parseICU(translatedString)` round-trip
+on the way back_. Whatever IR the provider returns is what lands in
+the model, which keeps the placeholders/plurals/selects unbreakable
+by construction.
+
+When the base IR carries no translatable text at all (e.g.
+`{name}` only), the orchestrator (and the per-cell ✦ button) treat
+it as `'skipped-empty'` _before_ the network call. The UI does not
+show a fake "translation suggested" state in that case.
+
+#### Concurrency
+
+Batch flows go through `apps/app/src/services/translate-orchestrator.ts`,
+which limits concurrent in-flight calls to a default of **3** (rolled
+by hand, no extra dep). Outcomes are returned in input order even
+though jobs run concurrently, so the review modal renders rows in a
+stable shape. The orchestrator catches every failure into a
+structured `TranslationOutcome.status` (`'ready'`, `'skipped-empty'`,
+`'skipped-unsupported'`, `'error'`) and never throws — the caller
+gets one outcome per input job, always.
+
+Each batch carries an `AbortSignal`. Cancelling the running modal
+aborts the orchestrator: not-yet-started jobs short-circuit to
+`'error'` (with `aborted` as the message), in-flight jobs are
+allowed to finish, and the editor dispatches a `translationClear`
+for every job in the batch. The model never holds half-applied state
+because nothing was applied yet — `setValuesBatch` only fires from
+the review-modal Apply path.
+
+#### Review-before-apply fits "no silent data loss"
+
+Per-cell ✦ shows a small popover anchored to the cell with `before`
+(rendered base text) and `after` (rendered suggestion); the user
+clicks Accept to dispatch `setValue` (`source: 'ai'`,
+`aiProvider: 'deepl'`), or Discard / Esc / click-outside to drop the
+suggestion. Per-row and per-locale flows funnel into a single
+`BatchTranslateModal` whose checkbox per row defaults to _checked
+for ready outcomes only_; skipped/errored rows render with a reason
+and no checkbox. "Apply selected" lands every checked outcome
+through one `setValuesBatch` dispatch.
+
+Failures live in `pendingTranslations` (a `ReadonlyMap<string,
+'pending' | { error }>` keyed by `${keyId}:${locale}`) — visible UI
+state, never `project.keys`. A second click on a still-`'pending'`
+cell is a no-op; an error entry stays visible (red border, tooltip)
+until the user dismisses it. This satisfies PROJECT.md's "no silent
+data loss" quality bar end-to-end: the user sees what would land,
+chooses what lands, and the model reflects only what they accepted.
+
+#### `UnsupportedLocaleError`
+
+Thrown by the DeepL adapter when the BCP-47 locale resolves to no
+DeepL code (e.g. `mt-MT`). The orchestrator catches it into
+`'skipped-unsupported'`; the batch modal renders the row with the
+exact message ("deepl: target locale "mt-MT" is not supported by
+this provider") and no checkbox. The per-cell popover renders the
+same message in a soft-error style (Close only) instead of dispatching
+a banner — the user can pick a different target locale and try
+again.
+
+#### Glossary flow
+
+`project.glossary` lives at the project level and is editable from a
+modal reachable via the topbar 📖 Glossary button
+(`apps/app/src/views/GlossaryModal.tsx`). Edits dispatch
+`addGlossaryEntry` / `updateGlossaryEntry` / `removeGlossaryEntry`
+on the reducer, which mutate `state.project.glossary` immutably and
+**do not** touch `state.dirty` — glossary is a project-level concern,
+not a per-key edit. The modal persists across reloads through
+`EditorMeta.glossary` (`apps/app/src/services/persistence.ts`); the
+sibling project-file option is left for the day a real `.polylocale`
+file lands.
+
+Every translation site forwards the current glossary to
+`provider.translate({ glossary })`:
+
+- per-cell ✦ — `AiCellAction` receives a `glossary?` prop from the
+  column factory and attaches it to the request,
+- per-row "Translate missing locales" and per-locale "Fill missing
+  for…" — `jobsForRow` / `jobsForLocale` write the glossary onto each
+  `TranslationJob`, and `runOne` forwards it.
+
+DeepL turns the glossary into a `/v2/glossaries` lookup (§4.7). The
+LLM helper appends glossary entries as advisory hints inside the
+system prompt (§4.6). The wire was live since Session 8 — the editor
+side that finally feeds it landed in Session 10.
+
+### 4.6 LLM masking strategy
+
+LLM-backed providers (OpenAI, Anthropic) all share
+`packages/ai/src/llm-translate.ts`. The flow:
+
+1. The adapter calls `collectTextNodes(nodes)` — same primitive DeepL
+   uses, no special path.
+2. The shared helper builds two prompts:
+   - **System** (fixed instruction): "You will receive a JSON object
+     `{from, to, fragments}`. Translate every element of `fragments`
+     from `from` to `to`. Return a single JSON object
+     `{translations: string[]}` of identical length and order.
+     Preserve leading and trailing whitespace verbatim. Never add,
+     remove, merge, or split fragments. If a fragment is purely
+     whitespace or punctuation, return it unchanged. Do not output
+     any text outside the JSON object." Glossary entries (the ones
+     whose `perLocale[to]` is set) and `context.{keyPath, description}`
+     are appended as advisory hints.
+   - **User**: the literal JSON `{from, to, fragments}`.
+3. The adapter's provider-specific `chat` callable posts those to the
+   provider's API and returns the assistant's text response.
+4. The helper parses, validates `translations` is a string array of
+   the exact requested length, and on any mismatch throws
+   `LLMResponseError` (provider id + reason + truncated response
+   body). Strict JSON mode (OpenAI's `response_format: {type:
+'json_schema', strict: true}`; Anthropic's instruction-only
+   contract) is best-effort, not a guarantee — the helper validates
+   regardless.
+
+**Per-call cap.** `MAX_FRAGMENTS_PER_CALL = 100`. Above the cap, the
+helper splits the fragment list into chunks, runs them sequentially
+through the same `chat` callable, and stitches the results in input
+order. The cap is invisible to callers — one input IR still produces
+one output IR. The cap exists to keep prompts within reasonable
+token budgets even for pathological keys (a `select` with hundreds of
+text fragments across cases). Cross-key batching would change the
+`AIProvider` signature and is intentionally out of scope; the
+`runTranslations` orchestrator already runs 3 jobs in parallel,
+which gives most of the throughput win without the API churn.
+
+**Default models** (current as of 2026-05-10):
+
+- OpenAI: `gpt-4o-mini`. Stable, available across account tiers,
+  cheapest GPT-4-class model. Override via `model` if your account
+  has access to a cheaper variant (e.g. GPT-5 mini).
+- Anthropic: `claude-haiku-4-5-20251001`. Pinned (not the rolling
+  alias) so future refreshes are deliberate. Brief explicitly
+  recommends Haiku for speed/cost.
+
+When refreshing models, also refresh this date.
+
+**CORS.** Both providers return CORS headers (Anthropic gates on the
+`anthropic-dangerous-direct-browser-access: true` header, which the
+adapter sends unconditionally). No same-origin proxy needed in dev.
+DeepL is the only provider that requires the proxy from §4.3.
+
+### 4.7 DeepL glossary mapping
+
+`createDeepLGlossaryService` (`packages/ai/src/deepl-glossary.ts`)
+turns the model's `GlossaryEntry[]` into a DeepL glossary id usable
+on `/v2/translate`. The DeepL adapter calls it lazily — only when
+`request.glossary` is non-empty. Flow per `(from, to)`:
+
+1. **Filter** entries to those with a usable `perLocale[to]` mapping
+   (either a non-empty `translation` or `doNotTranslate: true`,
+   which becomes a same-source-as-target pair). No usable entries →
+   return `undefined`, the adapter posts `/v2/translate` without a
+   glossary.
+2. **Language-pair check.** `GET /v2/glossary-language-pairs` is
+   fetched once per service instance and cached. If the
+   `(EN, PL)`-style DeepL pair (region-stripped) isn't listed →
+   return `undefined`. Translation still happens, just without
+   glossary semantics — silent skip is the right call here because
+   "DeepL doesn't have glossaries for Maltese" isn't an error
+   condition the user can fix.
+3. **Cache key.** `sha256(apiKey + ' ' + dlSource + ' ' + dlTarget +
+' ' + tsv)`, where `tsv` is the deterministic TSV body
+   (entries sorted by source term, tabs/newlines stripped from
+   values). The first 16 hex chars become the glossary's
+   deterministic name (`polylocale:<short-hash>`).
+4. **Lookup.** `GET /v2/glossaries`; if a glossary with that exact
+   name and matching `(source_lang, target_lang)` exists → reuse
+   its `glossary_id`.
+5. **Create** otherwise: `POST /v2/glossaries` with `{name,
+source_lang, target_lang, entries: tsv, entries_format: 'tsv'}`,
+   cache the returned id.
+
+The cache is in-memory per service instance; subsequent translations
+for the same `(from, to, glossary content)` short-circuit at step 3.
+DeepL's glossary endpoint accepts only the bare ISO-639-1 code
+(`EN`, `PT`); the region (`EN-US`, `PT-BR`) is stripped for
+glossary use but kept verbatim for `/v2/translate`. The adapter
+passes `glossary_id` only when `ensure` returns one — otherwise the
+field is omitted.
 
 ---
 
@@ -544,7 +820,87 @@ the user left off — without re-prompting for the directory in Chromium.
 
 ---
 
-## 6. What lives where (cheat sheet)
+## 6. Translator handoff (CSV)
+
+CSV is a **transport**, not a `SupportedFormat`. It never builds a
+`SourceFile`, never appears under `core/parsers|exporters`, and never
+becomes a round-trip-on-disk concern. It lives next to the model the same
+way `packages/ai` does — taking `LocalizationProject` in and sending
+`BatchValueEntry`s back through the existing `setValuesBatch` reducer
+action.
+
+### 6.1 Sheet shape
+
+```
+key, description, <locale 1>, <locale 2>, …
+```
+
+`key` is `TranslationKey.path`. `description` is `TranslationKey.description`
+or empty. Each locale column carries `value.raw ?? renderICU(value.ir)`
+— the same trade-off the editor uses for search. Missing values produce
+empty cells. Line endings are CRLF on export (RFC 4180); CRLF and LF are
+both accepted on import. No BOM (Excel-friendliness is a follow-up).
+
+The writer/parser lives in `packages/core/src/transport/csv.ts`:
+`exportProjectToCsv(project)` and `parseCsvRows(text)`. The parser is
+strict on the header (a `key` column is required; duplicate columns
+throw) and passes unknown header names through verbatim as `Record<string,
+string>` keys — the _service_ layer in `apps/app` decides which columns
+are project locales and which are extras.
+
+### 6.2 Import triage
+
+`apps/app/src/services/translator-handoff.ts:importCsvAndPlan` walks the
+parsed rows and produces an `ImportPlan` with three buckets:
+
+| current state        | cell text     | bucket                                 |
+| -------------------- | ------------- | -------------------------------------- |
+| empty / missing      | empty         | no-op                                  |
+| empty / missing      | text          | clean apply (parse error if malformed) |
+| set, IR matches text | text          | no-op                                  |
+| set, IR differs      | text          | **conflict**                           |
+| set                  | empty         | **conflict** (translator cleared cell) |
+| any                  | malformed ICU | parse error (per cell)                 |
+
+Equality uses `icuEqual(parseICU(cellText), currentValue.ir)` — not raw
+string compare — so a spreadsheet round-trip that shifts whitespace inside
+a plural body is not flagged as a conflict. Cells with malformed ICU
+become `parseErrors` and are never applied.
+
+Two whole-row failures land in `parseErrors` as well:
+
+- **Unknown key** — a CSV row whose `key` is not in the project. One
+  error per row, the row is skipped.
+- **Unknown column** — a header column that isn't `key`, `description`,
+  or a project locale. One error per column (dedup at the file level).
+
+`HandoffModal` renders the three buckets with checkboxes — clean applies
+default to checked, conflicts default to unchecked, parse errors are
+read-only — and the single Apply button funnels every accepted row
+through `setValuesBatch`. Nothing lands in the model that the user
+didn't tick.
+
+### 6.3 Why XLSX is deferred
+
+`xlsx` (sheetjs) and `exceljs` both add ~140–250 kB gz to the bundle for
+no behavioural win — CSV opens cleanly in LibreOffice, Numbers, Google
+Sheets, and Excel and round-trips through them as UTF-8 CSV. The
+contract above (column shape, cell text derivation, triage policy) is
+identical for XLSX; the day someone shows up with a real CSV-doesn't-work
+report we drop a serializer in alongside `csv.ts` and reuse the rest.
+
+### 6.4 Cleared-cell conflicts are non-applyable today
+
+The reducer has no `unsetValue` action — every action that touches a
+value writes one. When a translator clears a cell that previously had a
+translation, the import surfaces it as a conflict with
+`incomingIr === null`; the modal renders it inert with a hint. Adding a
+true unset path is a follow-up session, not a translator-handoff
+session.
+
+---
+
+## 7. What lives where (cheat sheet)
 
 | Concern                      | Lives in                                | Forbidden imports                     |
 | ---------------------------- | --------------------------------------- | ------------------------------------- |
@@ -561,7 +917,7 @@ it belongs in `core` or `ai`. If no, it belongs in `ui` or `apps/app`.
 
 ---
 
-## 7. Session-by-session roadmap
+## 8. Session-by-session roadmap
 
 - **Session 1 (this one):** foundation. Docs, license, scaffold, internal
   model, CI. **No production code.**

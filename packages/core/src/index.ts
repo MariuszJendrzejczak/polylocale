@@ -1,6 +1,6 @@
 export * from './model/index.js';
 export * from './locale/index.js';
-export { parseICU, renderICU, icuEqual } from './icu/index.js';
+export { parseICU, renderICU, icuEqual, icuStructuralEqual } from './icu/index.js';
 export { parseFlatJson } from './parsers/json-flat.js';
 export type { ParseFlatJsonInput } from './parsers/json-flat.js';
 export { exportFlatJson } from './exporters/json-flat.js';
@@ -10,3 +10,5 @@ export { exportArb } from './exporters/arb.js';
 export { parseNestedJson } from './parsers/json-nested.js';
 export type { ParseNestedJsonInput } from './parsers/json-nested.js';
 export { exportNestedJson } from './exporters/json-nested.js';
+export { exportProjectToCsv, parseCsvRows, CsvParseError } from './transport/csv.js';
+export type { CsvRow } from './transport/csv.js';
