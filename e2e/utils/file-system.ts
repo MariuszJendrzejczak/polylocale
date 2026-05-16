@@ -84,7 +84,7 @@ export async function clickAndCaptureDownloads(
   try {
     const first = await Promise.all([
       page.waitForEvent('download', { timeout: 15_000 }),
-      trigger.click(),
+      trigger.click({ timeout: 15_000 }),
     ]).then(([d]) => d);
     // The save loop fires per-file downloads synchronously inside one
     // microtask; pause briefly for any siblings to land before unhooking.
