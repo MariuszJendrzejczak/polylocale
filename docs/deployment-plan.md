@@ -8,6 +8,13 @@
 > the repo). Order matters: most Mariusz steps must finish before Claude
 > can wire the repo, because the workflow needs the GitHub secret and the
 > Firebase project id.
+>
+> **Status (2026-05-16):** first production deploy is live at
+> <https://polilocale-9c242.web.app/> (tag `v0.1.0`). Custom domain
+> (`polilocale.buzzards-soft.com`) and DeepL proxy are still pending —
+> see §2.5/§2.6 and §6. For routine releases after this one, see
+> [README → Releasing](../README.md#releasing) — the short version is
+> `git tag vX.Y.Z && git push origin vX.Y.Z` from a green `main`.
 
 ---
 
@@ -395,14 +402,16 @@ spin up isolated preview URLs. Skipped now to keep the workflow short.
 
 ## 7. Troubleshooting
 
-| Symptom                                           | Likely cause                                                    | Fix                                                                                            |
-| ------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Workflow fails at "Deploy" with `auth/...`        | Wrong / malformed JSON in `FIREBASE_SERVICE_ACCOUNT_POLILOCALE` | Regenerate the key in §2.3, paste the full JSON again.                                         |
-| Workflow succeeds, but `*.web.app` shows 404      | `firebase.json` `public` path wrong                             | Confirm it is `apps/app/dist` (Vite default), not `dist` or `public`.                          |
-| Workflow succeeds, custom domain shows old build  | DNS cached / Firebase CDN edge cache                            | Hard-refresh; wait 1–5 min; check Hosting → Release history shows the new release as Active.   |
-| `ERR_SSL_PROTOCOL_ERROR` on custom domain         | TLS cert not yet provisioned by Firebase                        | Wait up to 24h after DNS verification. Firebase shows "Provisioning" state during this window. |
-| Build fails locally but not in CI (or vice versa) | Lockfile drift                                                  | `pnpm install --frozen-lockfile` locally; commit any `pnpm-lock.yaml` diff.                    |
-| `Cache-Control` missing on assets                 | `firebase.json` `headers` glob did not match                    | Verify file path under `dist/` matches `/assets/**`; Vite outputs there by default.            |
+| Symptom                                                                                    | Likely cause                                                                                                                          | Fix                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workflow fails at "Deploy" with `auth/...`                                                 | Wrong / malformed JSON in `FIREBASE_SERVICE_ACCOUNT_POLILOCALE`                                                                       | Regenerate the key in §2.3, paste the full JSON again.                                                                                                     |
+| Workflow succeeds, but `*.web.app` shows 404                                               | `firebase.json` `public` path wrong                                                                                                   | Confirm it is `apps/app/dist` (Vite default), not `dist` or `public`.                                                                                      |
+| Workflow succeeds, custom domain shows old build                                           | DNS cached / Firebase CDN edge cache                                                                                                  | Hard-refresh; wait 1–5 min; check Hosting → Release history shows the new release as Active.                                                               |
+| `ERR_SSL_PROTOCOL_ERROR` on custom domain                                                  | TLS cert not yet provisioned by Firebase                                                                                              | Wait up to 24h after DNS verification. Firebase shows "Provisioning" state during this window.                                                             |
+| Build fails locally but not in CI (or vice versa)                                          | Lockfile drift                                                                                                                        | `pnpm install --frozen-lockfile` locally; commit any `pnpm-lock.yaml` diff.                                                                                |
+| `Cache-Control` missing on assets                                                          | `firebase.json` `headers` glob did not match                                                                                          | Verify file path under `dist/` matches `/assets/**`; Vite outputs there by default.                                                                        |
+| Deploy fails in ~12s at "Install dependencies" with `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY` | Tag was pushed on a commit that predates a lockfile fix on `main` (typical after a dependabot merge whose follow-up fix landed later) | Delete the tag locally **and** from origin (`git tag -d <tag> && git push origin :refs/tags/<tag>`), fast-forward `main`, retag on the fresh HEAD, repush. |
+| Tag triggers Deploy but the tag name looks weird in `git tag -l` (e.g. `v.0.1.0`)          | Tag created with a stray leading dot — workflow trigger `v*.*.*` accepts it but it sorts wrong                                        | Same fix as the row above: delete bad tag, push a SemVer tag (`vMAJOR.MINOR.PATCH`).                                                                       |
 
 ---
 

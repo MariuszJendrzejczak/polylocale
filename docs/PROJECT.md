@@ -2,7 +2,7 @@
 
 > Living product reference. Source of truth for _what we're building and for whom_.
 > Update this file whenever a product decision changes (scope, target user, quality bar).
-> The original kickoff brief is preserved verbatim in `doc/BRIEF.md`.
+> The original kickoff brief is preserved verbatim in [`BRIEF.md`](./BRIEF.md).
 
 ---
 

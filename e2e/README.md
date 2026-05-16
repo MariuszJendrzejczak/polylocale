@@ -2,7 +2,7 @@
 
 Playwright end-to-end tests for the polylocale SPA. The suite drives a
 production build through Playwright's bundled Chromium. Scenarios are
-catalogued in [`doc/E2E-TEST-PLAN.md`](../doc/E2E-TEST-PLAN.md) — that
+catalogued in [`docs/E2E-TEST-PLAN.md`](../docs/E2E-TEST-PLAN.md) — that
 file is the source of truth for what we cover and what we deliberately
 don't.
 
