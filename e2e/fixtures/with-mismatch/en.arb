@@ -1,0 +1,22 @@
+{
+  "@@locale": "en",
+  "appTitle": "Polylocale",
+  "greeting": "Hello {name}",
+  "@greeting": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "itemCount": "You have {count} items",
+  "@itemCount": {
+    "description": "Inventory size shown on the home screen",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "save": "Save"
+}

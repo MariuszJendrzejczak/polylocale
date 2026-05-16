@@ -35,6 +35,12 @@ yarn-debug.log*
 coverage/
 .nyc_output/
 
+# Playwright
+test-results/
+playwright-report/
+e2e/playwright-report/
+e2e/test-results/
+
 # Vite
 .vite/
 

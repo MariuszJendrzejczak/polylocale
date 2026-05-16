@@ -448,9 +448,13 @@ export function EditorView(): ReactElement {
 
   const onInputChange = useCallback(
     async (e: ChangeEvent<HTMLInputElement>): Promise<void> => {
-      const files = e.target.files;
+      // Snapshot the FileList into a real array before clearing the input
+      // value. Per WHATWG, `input.value = ''` on a file input wipes the
+      // live FileList that `e.target.files` references — capture first,
+      // then reset so the user can re-pick the same file later.
+      const files = e.target.files === null ? [] : Array.from(e.target.files);
       e.target.value = '';
-      if (files === null || files.length === 0) return;
+      if (files.length === 0) return;
       try {
         const { loaded, skipped } = await loadFromInputFiles(files);
         if (loaded.length === 0) {
@@ -602,6 +606,8 @@ export function EditorView(): ReactElement {
             value={row.values[locale]}
             issues={issues}
             dirty={dirty.has(row.id)}
+            keyPath={row.path}
+            locale={locale}
             onCommit={(ir, raw) =>
               dispatch({ type: 'setValue', keyPath: row.path, locale, ir, raw })
             }
@@ -941,7 +947,13 @@ function BatchProgressModal({
           <span style={{ width: `${total === 0 ? 0 : (completed / total) * 100}%` }} />
         </div>
         <div className={styles.batchActions}>
-          <button type="button" className={styles.button} onClick={onCancel}>
+          <button
+            type="button"
+            className={styles.button}
+            onClick={onCancel}
+            data-testid="batch-cancel"
+            aria-label="Cancel translation batch"
+          >
             Cancel
           </button>
         </div>

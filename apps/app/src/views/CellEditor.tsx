@@ -18,10 +18,17 @@ export interface CellEditorProps {
   readonly aiAction?: ReactNode;
   /** AI translation in flight or its last failure. */
   readonly pending?: PendingTranslation;
+  /** Stable selector hooks for the E2E suite. Behaviour-neutral. */
+  readonly keyPath?: string;
+  readonly locale?: string;
 }
 
 export function CellEditor(props: CellEditorProps): ReactElement {
-  const { value, issues, dirty, onCommit, aiAction, pending } = props;
+  const { value, issues, dirty, onCommit, aiAction, pending, keyPath, locale } = props;
+  const testIdProps =
+    keyPath !== undefined && locale !== undefined
+      ? { 'data-testid': 'cell', 'data-key-path': keyPath, 'data-locale': locale }
+      : {};
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +67,10 @@ export function CellEditor(props: CellEditorProps): ReactElement {
 
   if (editing) {
     return (
-      <div className={`${styles.cell} ${styles.editing} ${error !== null ? styles.errored : ''}`}>
+      <div
+        {...testIdProps}
+        className={`${styles.cell} ${styles.editing} ${error !== null ? styles.errored : ''}`}
+      >
         <textarea
           ref={taRef}
           className={styles.textarea}
@@ -91,6 +101,7 @@ export function CellEditor(props: CellEditorProps): ReactElement {
   const pendingError = isPendingError(pending) ? pending.error : null;
   return (
     <div
+      {...testIdProps}
       className={`${styles.cell} ${isPending ? styles.pending : ''} ${pendingError !== null ? styles.errored : ''}`}
       onClick={startEdit}
       onKeyDown={(e) => {

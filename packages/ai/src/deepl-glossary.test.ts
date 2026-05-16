@@ -209,4 +209,49 @@ describe('createDeepLGlossaryService', () => {
     expect(caught).toBeInstanceOf(ProviderHttpError);
     expect((caught as ProviderHttpError).status).toBe(500);
   });
+
+  // Chrome's `globalThis.fetch` rejects property-access invocation with a
+  // non-Window receiver (TypeError: Illegal invocation). The service used
+  // to call `options.fetch(url, ...)`, which bound `this` to the options
+  // object and broke every glossary call from the SPA. The fix is naked
+  // invocation; this regression test pins the contract by feeding a fetch
+  // that asserts `this` is *not* the options object on every call.
+  it('invokes options.fetch without rebinding `this` to the options object', async () => {
+    const options = {
+      apiKey: 'k:fx',
+      baseEndpoint: '/api/deepl/v2',
+      subtle: webcrypto.subtle,
+      fetch: async function (this: unknown, url: string, init: RequestInit): Promise<Response> {
+        // The real browser fetch enforces this via the binding spec; here
+        // we surface it explicitly so a regression to property-access
+        // invocation fails loudly inside the unit suite.
+        if (this === options) {
+          throw new TypeError(
+            'Illegal invocation: deepl-glossary called options.fetch as property access',
+          );
+        }
+        if (url.endsWith('/glossary-language-pairs')) {
+          return jsonResponse({
+            supported_languages: [{ source_lang: 'EN', target_lang: 'PL' }],
+          });
+        }
+        if (url.endsWith('/glossaries') && (init.method ?? 'GET') === 'GET') {
+          return jsonResponse({ glossaries: [] });
+        }
+        if (url.endsWith('/glossaries') && init.method === 'POST') {
+          return jsonResponse({
+            glossary_id: 'glo-bound',
+            name: 'polylocale:test',
+            source_lang: 'EN',
+            target_lang: 'PL',
+            ready: true,
+          });
+        }
+        return new Response('not found', { status: 404 });
+      } as unknown as typeof fetch,
+    };
+    const svc = createDeepLGlossaryService(options);
+    const id = await svc.ensure({ from: 'en', to: 'pl', entries: ENTRIES_EN_PL });
+    expect(id).toBe('glo-bound');
+  });
 });

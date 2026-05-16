@@ -1,0 +1,5 @@
+key,description,en,pl
+appTitle,,Polylocale,Polylocale
+greeting,,"Hello {name}","Witaj {name"
+home,,Home,Dom
+save,,Save,Zachowaj

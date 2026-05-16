@@ -37,6 +37,7 @@ export function RowTranslateMenu(props: RowTranslateMenuProps): ReactElement {
       <button
         type="button"
         className={styles.button}
+        data-testid="row-menu"
         disabled={disabled}
         onClick={(e) => {
           e.stopPropagation();

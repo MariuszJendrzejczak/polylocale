@@ -1,0 +1,13 @@
+{
+  "@@locale": "pl",
+  "appTitle": "Polylocale",
+  "greeting": "Witaj {name}",
+  "@greeting": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "save": "Zapisz"
+}

@@ -1,0 +1,9 @@
+{
+  "@@locale": "en",
+  "appTitle": "Polylocale",
+  "@appTitle": {
+    "description": "Application title shown in the title bar"
+  },
+  "home": "Home",
+  "save": "Save"
+}

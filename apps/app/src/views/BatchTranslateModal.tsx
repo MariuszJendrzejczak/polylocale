@@ -137,6 +137,7 @@ export function BatchTranslateModal(props: BatchTranslateModalProps): ReactEleme
           <button
             type="button"
             className={`${styles.button} ${styles.primary}`}
+            data-testid="batch-apply"
             onClick={applySelected}
             disabled={acceptCount === 0}
           >

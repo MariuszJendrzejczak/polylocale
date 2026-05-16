@@ -1,0 +1,20 @@
+{
+  "@@locale": "en",
+  "appTitle": "Polylocale",
+  "@appTitle": {
+    "description": "Application title shown in the title bar"
+  },
+  "greeting": "Hello {name}",
+  "@greeting": {
+    "description": "Friendly greeting on the home screen",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Jane"
+      }
+    }
+  },
+  "home": "Home",
+  "homeSubtitle": "Welcome back",
+  "save": "Save"
+}

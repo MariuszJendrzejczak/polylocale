@@ -149,6 +149,7 @@ export function AiCellAction(props: AiCellActionProps): ReactElement | null {
       <button
         type="button"
         className={styles.button}
+        data-testid="ai-suggest-button"
         onClick={(e) => {
           e.stopPropagation();
           void onClick();
@@ -162,6 +163,7 @@ export function AiCellAction(props: AiCellActionProps): ReactElement | null {
       {popover !== null && (
         <div
           className={styles.popover}
+          data-testid="ai-suggest-popover"
           role="dialog"
           aria-label="Translation suggestion"
           onClick={(e) => e.stopPropagation()}

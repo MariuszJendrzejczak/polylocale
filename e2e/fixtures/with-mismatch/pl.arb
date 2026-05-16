@@ -1,0 +1,22 @@
+{
+  "@@locale": "pl",
+  "appTitle": "Polylocale",
+  "greeting": "Witaj {name}",
+  "@greeting": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "itemCount": "Masz {n} elementów",
+  "@itemCount": {
+    "description": "Inventory size shown on the home screen",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "save": "Zapisz"
+}

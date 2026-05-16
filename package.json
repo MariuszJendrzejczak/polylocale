@@ -17,6 +17,8 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc -b",
     "test": "pnpm -r test",
+    "e2e": "playwright test --config e2e/playwright.config.ts",
+    "e2e:install": "playwright install --with-deps chromium",
     "clean": "pnpm -r exec rimraf dist .tsbuildinfo"
   },
   "devDependencies": {

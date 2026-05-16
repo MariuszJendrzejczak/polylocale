@@ -200,7 +200,7 @@ export function HandoffModal(props: HandoffModalProps): ReactElement {
                 const k = applyRowKey(entry);
                 const checked = selectedApplies.has(k);
                 return (
-                  <div key={k} className={styles.row}>
+                  <div key={k} data-testid="handoff-row-clean" className={styles.row}>
                     <input
                       type="checkbox"
                       className={styles.check}
@@ -230,7 +230,7 @@ export function HandoffModal(props: HandoffModalProps): ReactElement {
                 const cleared = conflict.incomingIr === null;
                 const checked = selectedConflicts.has(k);
                 return (
-                  <div key={k} className={styles.row}>
+                  <div key={k} data-testid="handoff-row-conflict" className={styles.row}>
                     {cleared ? (
                       <span aria-hidden="true" />
                     ) : (
@@ -317,7 +317,7 @@ function Section({
 
 function ErrorRow({ err }: { readonly err: ImportError }): ReactElement {
   return (
-    <div className={styles.errorRow}>
+    <div data-testid="handoff-row-parseError" className={styles.errorRow}>
       <span className={styles.errorKind}>{err.kind}</span>
       {err.message}
     </div>

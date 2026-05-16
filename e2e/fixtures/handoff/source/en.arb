@@ -1,0 +1,14 @@
+{
+  "@@locale": "en",
+  "appTitle": "Polylocale",
+  "greeting": "Hello {name}",
+  "@greeting": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "home": "Home",
+  "save": "Save"
+}
