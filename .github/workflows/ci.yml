@@ -72,7 +72,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download built SPA
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: app-dist
           path: apps/app/dist
