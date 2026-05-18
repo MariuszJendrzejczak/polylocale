@@ -17,7 +17,7 @@
   "devDependencies": {
     "fast-check": "^4.7.0",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.2"
+    "vitest": "^4.1.6"
   },
   "dependencies": {
     "@formatjs/icu-messageformat-parser": "^3.5.7"
