@@ -1,0 +1,14 @@
+{
+  "pkg": "@polylocale/ui",
+  "globalName": "PolylocaleUI",
+  "projectId": "cbbeea67-500e-4399-be08-d3837a70b64f",
+  "shape": "package",
+  "buildCmd": "pnpm -F \"@polylocale/ui...\" build",
+  "readmeHeader": ".design-sync/conventions.md",
+  "dtsPropsFor": {
+    "Table": "  /** Row data to render. The table is generic over the row type; rows are virtualized. */\n  rows: readonly unknown[];\n  /** Column definitions: an id, a header node, optional sizing, and a per-row cell renderer. */\n  columns: ReadonlyArray<{\n    id: string;\n    header: React.ReactNode;\n    /** Fixed column width in px. */\n    width?: number;\n    /** Minimum width in px when the column flexes (default 200). */\n    minWidth?: number;\n    /** Renders the cell content for a row. */\n    cell: (row: unknown) => React.ReactNode;\n    /** Provide to make the column sortable; returns the sort key for a row. */\n    sortBy?: (row: unknown) => string | number;\n  }>;\n  /** Stable unique key for a row (used for React keys and virtualization). */\n  rowKey: (row: unknown) => string;\n  /** Row height in px (default 36). */\n  rowHeight?: number;\n  /** Rendered when there are no rows. */\n  emptyState?: React.ReactNode;\n  /** Controlled global filter text. Pair with globalFilterFn. */\n  globalFilter?: string;\n  /** Predicate deciding whether a row matches the current filter text. */\n  globalFilterFn?: (row: unknown, value: string) => boolean;\n  /** Controlled sorting state: an array of { id, desc } entries. Pair with onSortingChange. */\n  sorting?: ReadonlyArray<{ id: string; desc: boolean }>;\n  /** Called with the next sorting state when the user toggles a sortable header. */\n  onSortingChange?: (next: ReadonlyArray<{ id: string; desc: boolean }>) => void;"
+  },
+  "overrides": {
+    "Table": { "cardMode": "column" }
+  }
+}
